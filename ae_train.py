@@ -35,7 +35,10 @@ def train(model, train_loader, device, optimizer, epoch):
         )
 
 
-        loss.backward()
+        if type(model) is SSAE:
+            loss.backward()
+        elif type(model) is SSVAE:
+            (-loss).backward()
         train_loss += loss.item()
         loss_dict = update_loss_dict(loss_dict, loss_dict_new)   # update_loss_dict need fixation
         optimizer.step()
@@ -50,7 +53,10 @@ def eval(model, test_loader, device):
     input_mb, gt_mb = iter(test_loader).next()
     gt_mb = gt_mb.to(device)
     input_mb = input_mb.to(device)
-    recon_mb = model(input_mb)
+    if type(model) is SSAE:
+        recon_mb = model(input_mb)
+    elif type(model) is SSVAE:
+        recon_mb, _ = model(input_mb)
     return input_mb, recon_mb, gt_mb
 
 

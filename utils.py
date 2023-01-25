@@ -5,6 +5,7 @@ import torchvision
 import torch
 from datasets import *
 from AE import SSAE
+from ssvae import SSVAE
 import time
 import argparse
 import matplotlib
@@ -12,6 +13,7 @@ matplotlib.use('Agg')
 
 def parse_args():
     parser = argparse.ArgumentParser()
+    parser.add_argument("--model", help='ssae or ssvae', type=str, default="ssae", required=True)
     parser.add_argument("--params_id", default=100)
     parser.add_argument("--img_size", help="The saptial size of the input image", default=256, type=int)
     parser.add_argument("--batch_size", default=16, type=int)
@@ -38,12 +40,19 @@ def parse_args():
     return parser.parse_args()
 
 def load_ssae(args):
-    model = SSAE(latent_img_size=args.latent_img_size,
-                z_dim=args.z_dim,
-                img_size=args.img_size,
-                nb_channels=args.nb_channels,
-                lamda=args.lamda,
-            )
+    if args.model == "ssae":
+        model = SSAE(latent_img_size=args.latent_img_size,
+            z_dim=args.z_dim,
+            img_size=args.img_size,
+            nb_channels=args.nb_channels,
+            lamda=args.lamda,
+        )
+    if args.model == "ssvae":
+        model = SSVAE(latent_img_size=args.latent_img_size,
+            z_dim=args.z_dim,
+            img_size=args.img_size,
+            nb_channels=args.nb_channels,
+        )
 
     return model
 
