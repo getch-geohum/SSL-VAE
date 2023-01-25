@@ -61,20 +61,25 @@ def get_train_dataloader(args):
     print(f'The histogram equalizaion is set to: {args.equalize}')
     print(f'The ndvi treshold is set to: {args.ndvi_treshold}')
     if os.path.exists(args.data_dir):
-        train_dataset = TrainDataset(root=args.data_dir,
-                                     func=args.func,
-                                     equalize=args.equalize,
-                                     nb_channels=args.nb_channels,
-                                     ndvi_treshold=args.ndvi_treshold,
-                                     intensity_treshold=args.intensity_treshold,
-                                     fake_dataset_size=256)
+        train_dataset = TrainDataset(
+            root=args.data_dir,
+            func=args.func,
+            equalize=args.equalize,
+            nb_channels=args.nb_channels,
+            ndvi_treshold=args.ndvi_treshold,
+            intensity_treshold=args.intensity_treshold,
+            fake_dataset_size=256
+        )
     else:
         raise RuntimeError("No / Wrong file folder provided")
 
-    train_dataloader = DataLoader(train_dataset,
-                                  batch_size=args.batch_size,
-                                  shuffle=True,
-                                  num_workers=12)
+    train_dataloader = DataLoader(
+        train_dataset,
+        batch_size=args.batch_size,
+        shuffle=True,
+        num_workers=12,
+        drop_last=True
+    )
 
     return train_dataloader
 
@@ -84,7 +89,12 @@ def get_test_dataloader(args, fake_dataset_size=None): # categ=None is added
     else:
         raise RuntimeError("No / Wrong file folder provided")
 
-    test_dataloader = DataLoader(test_dataset, batch_size=args.batch_size_test, num_workers=12)  # 
+    test_dataloader = DataLoader(
+        test_dataset,
+        batch_size=args.batch_size_test,
+        num_workers=12,
+        drop_last=True
+    )  # 
 
     return test_dataloader
 

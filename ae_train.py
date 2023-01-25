@@ -28,7 +28,7 @@ def train(model, train_loader, device, optimizer, epoch):
         b = b.to(device)
         c = c.to(device)
         d = d.to(device)
-        optimizer.zero_grad()   # otherwise grads accumulate in backward
+        optimizer.zero_grad(set_to_none=True)   # otherwise grads accumulate in backward
 
         loss, rec_im, loss_dict_new = model.step(
             (a, b, c, d)
@@ -70,7 +70,10 @@ def main(args):
     model.to(device)
 
     train_dataloader = get_train_dataloader(args)
-    test_dataloader = get_test_dataloader(args)
+    test_dataloader = get_test_dataloader(
+        args,
+        fake_dataset_size=4
+    )
 
     nb_channels = args.nb_channels
 
