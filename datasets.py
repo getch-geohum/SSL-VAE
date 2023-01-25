@@ -15,19 +15,41 @@ import cv2
 
 
 class TrainDataset(Dataset):
-    def __init__(self, root, func, equalize=True, ndvi_treshold=0.2, intensity_treshold=120, nb_channels=4):
+    def __init__(
+        self,
+        root, 
+        func,
+        equalize=True,
+        ndvi_treshold=0.2,
+        intensity_treshold=120,
+        nb_channels=4,
+        fake_dataset_size=None
+    ):
         self.root = root
         self.func = func
         self.equalize=equalize
         self.ndvi_treshold = ndvi_treshold
         self.intensity_treshold = intensity_treshold
         self.nb_channels = nb_channels
+        self.fake_dataset_size = fake_dataset_size
         
         self.train_path = f'{self.root}/train'
         self.test_path = f'{self.root}/test'
         
         self.img_dir = sorted(glob(f'{self.train_path}/images/*.tif'))
         self.lbl_dir = sorted(glob(f'{self.test_path}/images/*.tif'))
+        print("Number of train images", len(self.img_dir), 
+            "Number of test images", len(self.lbl_dir))
+
+        if ((self.fake_dataset_size is not None)
+            and (self.fake_dataset_size < len(self.img_dir))):
+            inds = list(range(min(len(self.lbl_dir), len(self.img_dir))))
+            sample = random.sample(inds, self.fake_dataset_size)
+            self.img_dir = [self.img_dir[ind] for ind in sample]
+            self.lbl_dir = [self.lbl_dir[ind] for ind in sample]
+
+            print("Number of train images after restriction", len(self.img_dir), 
+                "Number of test images after restriction", len(self.lbl_dir))
 
         self.image_array = self.image2Array(self.img_dir)   # read image arra
         self.mask_array = self.computeMask(self.lbl_dir,
@@ -149,17 +171,14 @@ class TestDataset(Dataset):
         self.fake_dataset_size=fake_dataset_size
         self.test_path = f'{root}/test'
         
-        if self.fake_dataset_size is not None:
-            self.img_dir = sorted(glob(f'{self.test_path}/images/*.tif'))
-            self.lbl_dir = sorted(glob(f'{self.test_path}/labels/*.tif'))
+        self.img_dir = sorted(glob(f'{self.test_path}/images/*.tif'))
+        self.lbl_dir = sorted(glob(f'{self.test_path}/labels/*.tif'))
             
+        if self.fake_dataset_size is not None:
             inds = list(range(len(self.img_dir)))
             sample = random.sample(inds, self.fake_dataset_size)
-            self.img_dir = [self.img_dir[ind] for ind in inds]
-            self.lbl_dir = [self.lbl_dir[ind] for ind in inds]
-        else:
-            self.img_dir = sorted(glob(f'{self.test_path}/images/*.tif'))
-            self.lbl_dir = sorted(glob(f'{self.test_path}/labels/*.tif'))
+            self.img_dir = [self.img_dir[ind] for ind in sample]
+            self.lbl_dir = [self.lbl_dir[ind] for ind in sample]
 
         self.image_array = self.image2Array(self.img_dir, normalize=True)   # read image arra
         self.mask_array = self.image2Array(self.lbl_dir, normalize=False)   # read image arra and compute array
