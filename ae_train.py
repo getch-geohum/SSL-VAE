@@ -57,6 +57,7 @@ def eval(model, test_loader, device):
         recon_mb = model(input_mb)
     elif type(model) is SSVAE:
         recon_mb, _ = model(input_mb)
+        recon_mb = model.mean_from_lambda(recon_mb)
     return input_mb, recon_mb, gt_mb
 
 
@@ -139,11 +140,15 @@ def main(args):
                 # print some reconstrutions
             if (epoch + 1) % 50 == 0 or epoch in [0, 4, 9, 14, 19, 24, 29, 49]:   # check this part
                 img_train = utils.make_grid(
+                    #tensor_img_to_01(
                         torch.cat((
                             torch.flip(input_mb[:, :3, :, :], dims=(1,)),
                             torch.flip(recon_mb[:, :3, :, :], dims=(1,)),
-                        ), dim=0), nrow=batch_size
-                    )
+                        ), dim=0)
+                    #)
+                    ,
+                    nrow=batch_size
+                )
                 utils.save_image(
                         img_train,
                         f"{res_dir}/{args.exp}_img_train_{epoch + 1}.png"
