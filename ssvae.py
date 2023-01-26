@@ -6,6 +6,9 @@ from torchvision.models.resnet import resnet18, resnet34, resnet50 # just resnet
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 
+import matplotlib
+matplotlib.use('TkAgg')
+import matplotlib.pyplot as plt
 
 class SSVAE(nn.Module):
     
@@ -54,7 +57,7 @@ class SSVAE(nn.Module):
             *self.encoder_layers,
         )
         self.final_encoder = nn.Sequential(
-            nn.Conv2d(512, self.z_dim * 2, kernel_size=1,
+            nn.Conv2d(128, self.z_dim * 2, kernel_size=1,
             stride=1, padding=0)
         ) # self.max_depth_conv  repace 2048
 
@@ -123,11 +126,12 @@ class SSVAE(nn.Module):
             return torch.log((2 * self.tarctanh(1 - 2 * x)) /
                             (1 - 2 * x) + eps)
 
-        return torch.mean(
-                    gamma * (x * torch.log(recon_x + eps) +
+        recon_x = gamma * recon_x # like if we multiplied the lambda ?
+        return torch.sum(
+                    (x * torch.log(recon_x + eps) +
                     (1 - x) * torch.log(1 - recon_x + eps) +
                     log_norm_const(recon_x)),
-                    dim=(1, 2, 3)
+                    dim=(1) #, 2, 3)
                 )
 
     def mean_from_lambda(self, l):
@@ -137,11 +141,13 @@ class SSVAE(nn.Module):
             torch.ones_like(l))
         return l / (2 * l - 1) + 1 / (2 * self.tarctanh(1 - 2 * l))
 
-    def kld(self):
+    def kld(self, beta=1):
         # NOTE -kld actually
-        return 0.5 * torch.mean(
-                1 + self.logvar - self.mu.pow(2) - self.logvar.exp(),
-            dim=(1, 2, 3)
+        mu_ = self.mu.pow(2) * beta
+        logvar_ = self.logvar * beta
+        return 0.5 * torch.sum(
+                (1 + logvar_ - mu_ - logvar_.exp()),
+            dim=(1)#, 2, 3)
         )
 
     def tarctanh(self, x):
@@ -157,21 +163,29 @@ class SSVAE(nn.Module):
         # A beta coefficient that will be pixel wise and that will be bigger
         # for pixels of the mask which are very different between the original
         # and modified version of x
-        beta = self.beta + Mm * torch.abs(xm - x)
+        gamma = Mn #self.beta + Mm * torch.abs(xm - x)
+        beta = Mn # Mm * torch.abs(xm - x)
+        for i in range(self.nb_conv):
+            beta = nn.functional.max_pool2d(beta, 2)
+        beta = torch.mean(beta, axis=1)[:, None]
+        #plt.imshow(beta[0, 0].cpu().numpy())
+        #plt.savefig("mask.png")
+        #fs
+        
 
-        rec_term = self.xent_continuous_ber(recon_x, x, 1 / beta)
+        rec_term = self.xent_continuous_ber(recon_x, x, gamma=gamma)
         rec_term = torch.mean(rec_term) # mean over the batch
 
-        kld = torch.mean(self.kld()) # mean over the batch
+        kld = torch.mean(self.kld(beta=beta)) # mean over the batch
 
-        L = (rec_term + kld)
+        L = (rec_term + 0.0001 * kld)
 
         loss = L
 
         loss_dict = {
             'loss': loss,
-            '1 / beta*rec_term': rec_term,
-            'kld': kld
+            'rec_term': rec_term,
+            'beta*kld': kld
         }
         print(loss_dict)
 
@@ -181,4 +195,7 @@ class SSVAE(nn.Module):
         X, Xm, M, Mn = inputs
         rec, _ = self.forward(Xm)
         loss, loss_dict = self.compute_loss(x=X, xm=Xm, Mm=M, Mn=Mn, recon_x=rec)
+
+        rec = self.mean_from_lambda(rec)
+
         return loss, rec, loss_dict
