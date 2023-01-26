@@ -77,7 +77,7 @@ def get_train_dataloader(args):
             nb_channels=args.nb_channels,
             ndvi_treshold=args.ndvi_treshold,
             intensity_treshold=args.intensity_treshold,
-            fake_dataset_size=256
+            fake_dataset_size=512
         )
     else:
         raise RuntimeError("No / Wrong file folder provided")
@@ -115,7 +115,7 @@ def tensor_img_to_01(t, share_B=False):
     if share_B:
         t = ((t - torch.amin(t, dim=(0, 1, 2, 3), keepdim=True)) /
             (torch.amax(t, dim=(0, 1, 2, 3), keepdim=True) - torch.amin(t,
-            dim=(0, 1, 2,3),
+            dim=(0, 1, 2, 3),
             keepdim=True)))
     if not share_B:
         t = ((t - torch.amin(t, dim=(1, 2, 3), keepdim=True)) /
