@@ -79,8 +79,9 @@ def main(args):
     train_dataloader = get_train_dataloader(args)
     test_dataloader = get_test_dataloader(
         args,
-        fake_dataset_size=4
+        fake_dataset_size=16
     )
+    
 
     nb_channels = args.nb_channels
 
@@ -105,9 +106,10 @@ def main(args):
     if not os.path.isdir(data_dir):
         os.makedirs(data_dir, exist_ok=True)
         
-        
     try:
         if args.force_train:
+            print(f'Force train enforced: {args.force_train}')
+            #print(f'Force train no enforced: {args.force_train}')
             raise FileNotFoundError
         file_name = f"{args.exp}_{args.params_id}.pth"
         model = load_model_parameters(model, file_name, checkpoints_dir, checkpoints_saved_dir, device)
