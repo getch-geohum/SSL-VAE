@@ -22,6 +22,7 @@ def make_normal(img):
 
 def ssim(a, b, win_size):
     "Structural di-SIMilarity: SSIM"
+    #print(f'shape a: {a.shape} \n shape b: {b.shape}')
     a = a.detach().cpu().permute(1, 2, 0).numpy()
     b = b.detach().cpu().permute(1, 2, 0).numpy()
 
@@ -88,11 +89,12 @@ def test(args):
         imgs = imgs.to(device)
 
         gt_np = gt[0].cpu().numpy().astype(float)
-        print('Ground truth shape', gt_np.shape)
-        print('Ground truth dtype', gt_np.dtype)
+        #print('Ground truth shape', gt_np.shape)
+        #print('Ground truth dtype', gt_np.dtype)
         
 
-        x_rec = model(imgs) 
+        x_rec,_ = model(imgs)
+        #print(f'Reconstruction shape: {x_rec.shape}')
 
         score, ssim_map = dissimilarity_func(x_rec[0],imgs[0], 11)  
 
