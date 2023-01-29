@@ -41,6 +41,7 @@ def parse_args():
 
 def load_ssae(args):
     if args.model == "ssae":
+        print(f'with specified model param { args.model}: self-supervised autoencoder will be loaded')
         model = SSAE(latent_img_size=args.latent_img_size,
             z_dim=args.z_dim,
             img_size=args.img_size,
@@ -48,6 +49,7 @@ def load_ssae(args):
             lamda=args.lamda,
         )
     if args.model == "ssvae":
+        print(f'with specified model param { args.model}: self-supervised variational autoencoder will be loaded')
         model = SSVAE(latent_img_size=args.latent_img_size,
             z_dim=args.z_dim,
             img_size=args.img_size,
@@ -95,6 +97,7 @@ def get_train_dataloader(args):
 def get_test_dataloader(args, fake_dataset_size=None): # categ=None is added
     if os.path.exists(args.data_dir):
         test_dataset = TestDataset(args.data_dir,fake_dataset_size=fake_dataset_size)
+        print(f'Test datset size: {len(test_dataset)}')
     else:
         raise RuntimeError("No / Wrong file folder provided")
 
