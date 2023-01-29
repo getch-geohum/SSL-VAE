@@ -59,7 +59,7 @@ class SSVAE(nn.Module):
         self.final_encoder = nn.Sequential(
             nn.Conv2d(128, self.z_dim * 2, kernel_size=1,
             stride=1, padding=0)
-        ) # self.max_depth_conv  repace 2048
+        ) # self.max_depth_conv  repace 2048   128
 
         self.initial_decoder = nn.Sequential(
             nn.ConvTranspose2d(self.z_dim, self.max_depth_conv,
@@ -168,6 +168,7 @@ class SSVAE(nn.Module):
         for i in range(self.nb_conv):
             beta = nn.functional.max_pool2d(beta, 2)
         beta = torch.mean(beta, axis=1)[:, None]
+        #print(f'beta shape: {beta.shape}')
         #plt.imshow(beta[0, 0].cpu().numpy())
         #plt.savefig("mask.png")
         #fs
@@ -187,7 +188,7 @@ class SSVAE(nn.Module):
             'rec_term': rec_term,
             'beta*kld': kld
         }
-        print(loss_dict)
+        #print(loss_dict)
 
         return loss, loss_dict
     
