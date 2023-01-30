@@ -39,14 +39,17 @@ class TrainDataset(Dataset):
         self.img_dir = sorted(glob(f'{self.train_path}/images/*.tif'))
         self.lbl_dir = sorted(glob(f'{self.test_path}/images/*.tif'))
         print("Number of train images", len(self.img_dir), 
-            "Number of test images", len(self.lbl_dir))
+                "Number of test images", len(self.lbl_dir),
+                "Fake dataset size", self.fake_dataset_size)
 
         if ((self.fake_dataset_size is not None)
             and (self.fake_dataset_size < len(self.img_dir))):
-            inds = list(range(min(len(self.lbl_dir), len(self.img_dir))))
+            #inds = list(range(min(len(self.lbl_dir), len(self.img_dir))))
+            inds = list(range(len(self.img_dir)))
+            print(f'Length of indexes for sampling: {len(inds)}')
             sample = random.sample(inds, self.fake_dataset_size)
             self.img_dir = [self.img_dir[ind] for ind in sample]
-            self.lbl_dir = [self.lbl_dir[ind] for ind in sample]
+            #self.lbl_dir = [self.lbl_dir[ind] for ind in sample]
 
             print("Number of train images after restriction", len(self.img_dir), 
                 "Number of test images after restriction", len(self.lbl_dir))
