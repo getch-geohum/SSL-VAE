@@ -141,14 +141,18 @@ class SSVAE(nn.Module):
             torch.ones_like(l))
         return l / (2 * l - 1) + 1 / (2 * self.tarctanh(1 - 2 * l))
 
-    def kld(self, beta=1):
-        # NOTE -kld actually
-        mu_ = self.mu.pow(2) * beta
-        logvar_ = self.logvar * beta
-        return 0.5 * torch.sum(
-                (1 + logvar_ - mu_ - logvar_.exp()),
-            dim=(1)#, 2, 3)
-        )
+    #def kld(self, beta=1):
+     #   # NOTE -kld actually
+     #   mu_ = self.mu.pow(2) * beta
+     #   logvar_ = self.logvar * beta
+     #   return 0.5 * torch.sum(
+     #           (1 + logvar_ - mu_ - logvar_.exp()),
+     #       dim=(1)#, 2, 3)
+     #   )
+
+    def kld(self):
+        return 0.5 * torch.sum(1 + self.logvar - self.mu.pow(2) - self.logvar.exp(),dim=(1))
+
 
     def tarctanh(self, x):
         return 0.5 * torch.log((1+x)/(1-x))
@@ -177,8 +181,9 @@ class SSVAE(nn.Module):
         rec_term = self.xent_continuous_ber(recon_x, x, gamma=gamma)
         rec_term = torch.mean(rec_term) # mean over the batch
 
-        kld = torch.mean(self.kld(beta=beta)) # mean over the batch
-
+        #kld = torch.mean(self.kld(beta=beta)) # mean over the batch
+        kld = torch.mean(self.kld())
+        
         L = (rec_term + 0.0001 * kld)
 
         loss = L
