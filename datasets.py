@@ -23,7 +23,9 @@ class TrainDataset(Dataset):
         ndvi_treshold=0.2,
         intensity_treshold=120,
         nb_channels=4,
-        fake_dataset_size=None
+        fake_dataset_size=None,
+        c_treshold=0,
+        b_treshold=0
     ):
         self.root = root
         self.func = func
@@ -32,6 +34,8 @@ class TrainDataset(Dataset):
         self.intensity_treshold = intensity_treshold
         self.nb_channels = nb_channels
         self.fake_dataset_size = fake_dataset_size
+        self.c_treshold = c_treshold
+        self.b_treshold = b_treshold
         
         self.train_path = f'{self.root}/train'
         self.test_path = f'{self.root}/test'
@@ -40,7 +44,9 @@ class TrainDataset(Dataset):
         self.lbl_dir = sorted(glob(f'{self.test_path}/images/*.tif'))
         print("Number of train images", len(self.img_dir), 
                 "Number of test images", len(self.lbl_dir),
-                "Fake dataset size", self.fake_dataset_size)
+                "Fake dataset size", self.fake_dataset_size,
+                "brightness treshold", self.b_treshold,
+                "contrast treshold", self.c_treshold)
 
         if ((self.fake_dataset_size is not None)
             and (self.fake_dataset_size < len(self.img_dir))):
@@ -59,7 +65,9 @@ class TrainDataset(Dataset):
                                            func=self.func,
                                            ndvi_treshold=self.ndvi_treshold,
                                            intensity_treshold=self.intensity_treshold,
-                                           equalize=self.equalize)   # read image arra and compute array
+                                           equalize=self.equalize,
+                                           c_treshold=self.c_treshold,
+                                           b_treshold=self.b_treshold)   # read image arra and compute array
         
         N = len(self.image_array)
         n = len(self.mask_array)
@@ -123,12 +131,29 @@ class TrainDataset(Dataset):
     def image2Array(self, images):
         return [self.make_normal(imread(image)) for image in images]
     
-    def intensityMasker(self, x, equalize=False, treshold=120):# 120
+    def intensityMasker(self, x, equalize=False, treshold=120, b_treshold=0, c_treshold=0):# 120
+        print(f'b_treshold: {b_treshold}')
+        print(f'c_treshold: {c_treshold}')
+         
         rgb = np.dstack((x[:,:,2], x[:,:,1], x[:,:, 0]))
         gray = cv2.cvtColor((rgb*255).astype(np.uint8),cv2.COLOR_BGR2GRAY)
+        contrast = round(gray.std(),2)
+        brightness = round(np.sqrt(gray.mean()),2)
         if equalize:
             gray = cv2.equalizeHist(gray)
-        mask = np.where(gray<=treshold,0,1).astype(np.uint8)
+        
+        contrast = round(gray.std(),2)
+        brightness = round(np.sqrt(gray.mean()),2)
+
+        if (b_treshold > 0) and (brightness < b_treshold):
+            print(f'got b_treshold: {b_treshold}')
+            reta, mask = cv2.threshold(gray,0,1,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        elif (c_treshold > 0) and (contrast < c_treshold):
+            print(f'got c_treshold: {c_treshold}')
+            reta, mask = cv2.threshold(gray,0,1,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
+        else:
+            mask = np.where(gray<=treshold,0,1).astype(np.uint8)
+            print('Mask will be generated without acounting low ontrast objects')
         mask_clean = cv2.morphologyEx(mask,cv2.MORPH_OPEN,np.ones((3,3), int), iterations = 1) # cler ver smaller detached objects
         big_mask = np.dstack([mask_clean]*self.nb_channels) # multi-channel mask based on number of channels specifid
         if np.sum(mask_clean)>=16:
@@ -148,12 +173,12 @@ class TrainDataset(Dataset):
         else:
             return None
         
-    def computeMask(self, files, func='NDVI', ndvi_treshold=None, intensity_treshold=None, equalize=None):
+    def computeMask(self, files, func='NDVI', ndvi_treshold=None, intensity_treshold=None, equalize=None, c_treshold=None, b_treshold=None):
         arrays = self.image2Array(files)
         if func == 'NDVI': # ndvi based tresholding
             masks = [self.ndviMasker(img, treshold=ndvi_treshold) for img in arrays] 
         else: # intensity based tresholding
-            masks = [self.intensityMasker(img, equalize=equalize, treshold=intensity_treshold) for img in arrays]
+            masks = [self.intensityMasker(img, equalize=equalize, treshold=intensity_treshold, c_treshold=c_treshold, b_treshold=b_treshold) for img in arrays]
             
         masks = [mask for mask in masks if mask is not None]
         return masks

@@ -116,7 +116,7 @@ def test(args):
         print(f'== Shape of amaps: {amaps.shape}==')
 
         
-        preds = amaps.copy() 
+        preds = mad_a # amaps.copy() 
         mask = np.zeros(gt_np.shape)
 
         try:

@@ -34,8 +34,10 @@ def parse_args():
     parser.add_argument("--func", help='strateg to create a wek mask, either NDVI or intensity', type=str, default="NDVI", required=False)
     parser.add_argument("--ndvi_treshold", help='NDVI treshold value to create binay mask', type=float,default=0.2,required=False)
     parser.add_argument("--intensity_treshold", help='intenity treshold to create binary mask', type=int, default=120,required=False)
+    parser.add_argument("--contrast_treshold", help='Gray scale imge contrast treshold to screen image ', type=float, default=0,required=False)
+    parser.add_argument("--brightness_treshold", help='Gray scale image brightness treshold to sreen image', type=float, default=0,required=False)
     parser.add_argument("--equalize", help='if func is intensity, whether to run histogram equaliation', dest='equalize', action='store_true')
-    parser.set_defaults(equalize=False)
+    parser.set_defaults(equalize=False) # c_treshold
 
     return parser.parse_args()
 
@@ -79,7 +81,9 @@ def get_train_dataloader(args):
             nb_channels=args.nb_channels,
             ndvi_treshold=args.ndvi_treshold,
             intensity_treshold=args.intensity_treshold,
-            fake_dataset_size=512
+            fake_dataset_size=512,
+            c_treshold=args.contrast_treshold,
+            b_treshold=args.brightness_treshold
         )
     else:
         raise RuntimeError("No / Wrong file folder provided")
