@@ -141,16 +141,16 @@ class SSVAE(nn.Module):
             torch.ones_like(l))
         return l / (2 * l - 1) + 1 / (2 * self.tarctanh(1 - 2 * l))
 
-    #def kld(self, beta=1):
-     #   # NOTE -kld actually
-     #   mu_ = self.mu.pow(2) * beta
-     #   logvar_ = self.logvar * beta
-     #   return 0.5 * torch.sum(
-     #           (1 + logvar_ - mu_ - logvar_.exp()),
-     #       dim=(1)#, 2, 3)
-     #   )
+    def kld_m(self, beta=1): # kld loss with mask
+        # NOTE -kld actually
+        mu_ = self.mu.pow(2) * beta
+        logvar_ = self.logvar * beta
+        return 0.5 * torch.sum(
+                (1 + logvar_ - mu_ - logvar_.exp()),
+            dim=(1)#, 2, 3)
+        )
 
-    def kld(self):
+    def kld(self): # kld loss without mask
         return 0.5 * torch.sum(1 + self.logvar - self.mu.pow(2) - self.logvar.exp(),dim=(1))
 
 
@@ -178,10 +178,13 @@ class SSVAE(nn.Module):
         #fs
         
 
-        rec_term = self.xent_continuous_ber(recon_x, x, gamma=gamma)
-        rec_term = torch.mean(rec_term) # mean over the batch
-
-        #kld = torch.mean(self.kld(beta=beta)) # mean over the batch
+        #rec_term = self.xent_continuous_ber(recon_x, x, gamma=gamma)
+        #rec_term = torch.mean(rec_term) # mean over the batch
+        #kld = torch.mean(self.kld_m(beta=beta)) # mean over the batch
+        
+        rec_normal = torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mn)) #/torch.sum(Mn[:,0,:,:])
+        rec_modified = torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mm)) #/torch.sum(Mm[:,0,:,:])
+        rec_term = 0.9*rec_normal-0.1*rec_modified
         kld = torch.mean(self.kld())
         
         L = (rec_term + 0.0001 * kld)
@@ -197,6 +200,28 @@ class SSVAE(nn.Module):
 
         return loss, loss_dict
     
+    def new_rec_loss(self, x, xm, Mm, Mn, recon_x, lamda=0.1):
+        '''x: original input
+        xm: modified version of input x
+        recon_x: recontructed image
+        Mm: mask signifying modified regions
+        Mn: Mask signifying normal areas
+        '''
+        rec_dif = recon_x-x   # Xrec-X
+        mod_dif = xm-x        # Xm-X
+        mod_dif_abs = torch.abs(mod_dif)   # |Xm-X|
+        
+        
+        top = Mn*rec_dif
+        buttom_ = Mm*rec_dif
+        buttom = mod_dif_abs*rec_dif
+        a = (lamda/torch.norm(Mn,1))*torch.norm(top,2)
+        b = ((1-lamda)/torch.norm(buttom_,1))*torch.norm(Mm*buttom,2)
+        loss = a-b
+
+        return loss
+
+
     def step(self, inputs): # inputs contain, modified image, normal image and mask
         X, Xm, M, Mn = inputs
         rec, _ = self.forward(Xm)

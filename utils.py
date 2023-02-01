@@ -81,7 +81,7 @@ def get_train_dataloader(args):
             nb_channels=args.nb_channels,
             ndvi_treshold=args.ndvi_treshold,
             intensity_treshold=args.intensity_treshold,
-            fake_dataset_size=512,
+            fake_dataset_size=1024,
             c_treshold=args.contrast_treshold,
             b_treshold=args.brightness_treshold
         )

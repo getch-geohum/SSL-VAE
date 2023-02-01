@@ -13,5 +13,6 @@ python3 ae_test.py\
     --lamda=0.9\
     --nb_channels=4\
     --params_id=100\
-    --dst_dir=/home/getch/ssl/DATA/SSL_VAE_a/OUTS/Nguyen_march_2017\
-    --data_dir=/home/getch/DATA/VAE/data/Nguyen_march_2017\
+    --dst_dir=/home/getch/ssl/DATA/SSL_VAE_a/OUTS/Minawao_feb_2017\
+    --data_dir=/home/getch/DATA/VAE/data/Minawao_feb_2017\
+

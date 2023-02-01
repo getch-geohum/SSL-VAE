@@ -72,12 +72,18 @@ class TrainDataset(Dataset):
         N = len(self.image_array)
         n = len(self.mask_array)
         dif = N-n
-        
-        self.added = [random.choice(self.mask_array) for i in range(dif)]
-        print(f'Sampled mask: {len(self.added[0])}')
-        self.mask_array = self.mask_array+self.added
-        print(f'image lenegth: {len(self.image_array)}, mask length: {len(self.mask_array)}')
-        print(f'length of masks: {len(self.mask_array[0])}')
+
+        if dif>0:
+            added = [random.choice(self.mask_array) for i in range(dif)]
+            print(f'Sampled mask: {len(added)}')
+            self.mask_array = self.mask_array + added
+            print(f'image lenegth: {len(self.image_array)}, mask length: {len(self.mask_array)}')
+            print(f'length of masks: {len(self.mask_array[0])}')
+        elif dif<0:
+            added_img = [random.choice(self.image_array) for i in range(abs(dif))]
+            self.image_array = self.image_array + added_img
+        else:
+            print('Images and maks have equal length')
         
         masked_a = [data[0] for data in self.mask_array]
         masked_l = [data[1] for data in self.mask_array]
@@ -92,7 +98,7 @@ class TrainDataset(Dataset):
         
         del self.image_array 
         del self.mask_array
-        del self.added
+        #del self.added
         del masked_a
         del masked_l
         del mod_a

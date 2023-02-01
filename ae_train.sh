@@ -15,11 +15,11 @@ python3 ae_train.py\
 	--params_id=100\
 	--ndvi_treshold=0.3\
 	--intensity_treshold=120\
-	--brightness_treshold=6.5\
+	--brightness_treshold=7\
 	--contrast_treshold=0\
-	--func=intensity\
-	--dst_dir=/home/getch/ssl/DATA/SSL_VAE_a/OUTS/Nguyen_march_2017\
-        --data_dir=/home/getch/DATA/VAE/data/Nguyen_march_2017\
+	--func=NDVI\
+	--dst_dir=/home/getch/ssl/DATA/SSL_VAE_a/OUTS/Minawao_feb_2017\
+        --data_dir=/home/getch/DATA/VAE/data/Minawao_feb_2017\
 	--force_train\
 	#--equalize\
 
