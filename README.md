@@ -11,6 +11,8 @@ dataset: Deghale_Apr_2017    func=NDVI, ndvi_treshold=0.1
 dataset:Nguyen_march_2017    func=intensity, intensity_treshol=120, brightness_treshold=6.5 contrast_teshold=0
 dataset: Tza_oct_2016        func=intensity, intensity_treshol=120, brightness_treshold=7 contrast_teshold=0
 dataset: Kutuplong_dec_2017  func=intensity, intensity_treshol=150, brightness_treshold=0 contrast_teshold=0
+dataset: Kule_tirkidi_jun_2018  func=intensity, intensity_treshol=140, brightness_treshold=0 contrast_teshold=0 equalize
+dataset: Kule_tirkidi_marc_2017  func=intensity, intensity_treshol=145, brightness_treshold=0 contrast_teshold=0 equalize
 
 
 
