@@ -125,13 +125,13 @@ class SSVAE(nn.Module):
                     torch.ones_like(x))
             return torch.log((2 * self.tarctanh(1 - 2 * x)) /
                             (1 - 2 * x) + eps)
-
+        
         recon_x = gamma * recon_x # like if we multiplied the lambda ?
         return torch.sum(
                     (x * torch.log(recon_x + eps) +
                     (1 - x) * torch.log(1 - recon_x + eps) +
                     log_norm_const(recon_x)),
-                    dim=(1) #, 2, 3)
+                    dim=(1)   # it use to be (1)
                 )
 
     def mean_from_lambda(self, l):
@@ -169,22 +169,30 @@ class SSVAE(nn.Module):
         # and modified version of x
         gamma = Mn #self.beta + Mm * torch.abs(xm - x)
         beta = Mn # Mm * torch.abs(xm - x)
+        beta_inv = Mm
         for i in range(self.nb_conv):
             beta = nn.functional.max_pool2d(beta, 2)
+            beta_inv = nn.functional.max_pool2d(beta_inv, 2)
         beta = torch.mean(beta, axis=1)[:, None]
+        beta_inv = torch.mean(beta_inv, axis=1)[:, None]
         #print(f'beta shape: {beta.shape}')
         #plt.imshow(beta[0, 0].cpu().numpy())
         #plt.savefig("mask.png")
         #fs
         
-
+        
         #rec_term = self.xent_continuous_ber(recon_x, x, gamma=gamma)
         #rec_term = torch.mean(rec_term) # mean over the batch
         #kld = torch.mean(self.kld_m(beta=beta)) # mean over the batch
-        
-        rec_normal = torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mn)) #/torch.sum(Mn[:,0,:,:])
-        rec_modified = torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mm)) #/torch.sum(Mm[:,0,:,:])
-        rec_term = 0.9*rec_normal-0.1*rec_modified
+        #kld_inv = torch.mean(self.kld_m(beta=beta_inv))
+
+        base = 256*256
+        lambda_ = 0.9
+        w_n = torch.sum(Mn[:,0,:,:],dim=(1,2))/base # [batch_n,] weight to balance contribution from unmodified region
+        w_m = torch.sum(Mm[:,0,:,:],dim=(1,2))/base # [batch_n,] weight to balance contribution from modified region
+        rec_normal = torch.mean(torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mn),dim=(1,2))*w_n)
+        rec_modified = torch.mean(torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mm),dim=(1,2))*w_m)
+        rec_term = lambda_*rec_normal-(1-lambda_)*rec_modified  # just to follow Boers work
         kld = torch.mean(self.kld())
         
         L = (rec_term + 0.0001 * kld)
@@ -200,7 +208,7 @@ class SSVAE(nn.Module):
 
         return loss, loss_dict
     
-    def new_rec_loss(self, x, xm, Mm, Mn, recon_x, lamda=0.1):
+    def new_rec_loss(self, x, xm, Mm, Mn, recon_x, lamda=0.1):# trested but not used 
         '''x: original input
         xm: modified version of input x
         recon_x: recontructed image

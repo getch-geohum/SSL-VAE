@@ -248,3 +248,6 @@ class TestDataset(Dataset):
         img = self.image_array[index]
         msk = self.mask_array[index]
         return self.transform(img), self.transform(msk)
+
+
+

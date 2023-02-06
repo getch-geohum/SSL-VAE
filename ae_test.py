@@ -87,15 +87,14 @@ def test(args):
     pbar = tqdm(test_dataloader)
     for ii,(imgs, gt) in enumerate(pbar): # changed
         imgs = imgs.to(device)
-
         gt_np = gt[0].cpu().numpy().astype(float)
         #print('Ground truth shape', gt_np.shape)
         #print('Ground truth dtype', gt_np.dtype)
         
-
         x_rec,_ = model(imgs)
-        #print(f'Reconstruction shape: {x_rec.shape}')
 
+        #print(f'Reconstruction shape: {x_rec.shape}')
+        #print(f'shape of rec: {x_rec.shape}; shape of imgs: {imgs.shape}')
         score, ssim_map = dissimilarity_func(x_rec[0],imgs[0], 11)  
 
         ssim_map = ((ssim_map - np.amin(ssim_map)) / (np.amax(ssim_map) - np.amin(ssim_map))) # normalized structural similarity index
@@ -135,6 +134,7 @@ def test(args):
         
         rec = x_rec[0].detach().permute(1, 2, 0).cpu().numpy()
         rec = rec[..., :3] # NOTE 4 bands panoptics
+        rec = np.dstack((rec[:,:,2], rec[:,:,1],rec[:,:,0]))  # to have clear RGB image
         path_to_save = f'{args.dst_dir}/predictions/'  # needs reshafling
 
         img_to_save = Image.fromarray((ori * 255).astype(np.uint8))
@@ -143,7 +143,7 @@ def test(args):
         img_to_save.save(path_to_save + '{}_gt.png'.format(str(ii))) 
         img_to_save = Image.fromarray((rec * 255).astype(np.uint8))
         img_to_save.save(path_to_save + '{}_rec.png'.format(str(ii)))    
-        np.save(path_to_save + f'{ii}_final_amap.npy', amaps)  # this is basically single channel SSIM, just to see incase there is any distortion while converting to jet color color gun
+        #np.save(path_to_save + f'{ii}_final_amap.npy', amaps)  
 
         cm = plt.get_cmap('jet')
         amaps = cm(amaps)
