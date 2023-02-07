@@ -13,13 +13,13 @@ python3 ae_train.py\
 	--lamda=0.9\
 	--nb_channels=4\
 	--params_id=100\
-	--ndvi_treshold=0.15\
+	--ndvi_treshold=0.10\
 	--intensity_treshold=120\
-	--brightness_treshold=6.5\
+	--brightness_treshold=7\
 	--contrast_treshold=0\
-	--func=NDVI\
-	--dst_dir=/home/getch/ssl/DATA/SSL_VAE_aaaa/OUTS/Kule_tirkidi_jun_2018\
-        --data_dir=/home/getch/DATA/VAE/data/Kule_tirkidi_jun_2018\
+	--func=grayIntensity\
+	--dst_dir=/home/getch/ssl/DATA/SSL_VAE_aaaa+/OUTS/Tza_oct_2016\
+        --data_dir=/home/getch/DATA/VAE/data/Tza_oct_2016\
 	--force_train\
 	#--equalize\
 

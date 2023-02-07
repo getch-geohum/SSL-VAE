@@ -46,7 +46,8 @@ class TrainDataset(Dataset):
                 "Number of test images", len(self.lbl_dir),
                 "Fake dataset size", self.fake_dataset_size,
                 "brightness treshold", self.b_treshold,
-                "contrast treshold", self.c_treshold)
+                "contrast treshold", self.c_treshold,
+                "Tresholding function", self.func)
 
         if ((self.fake_dataset_size is not None)
             and (self.fake_dataset_size < len(self.img_dir))):
@@ -137,7 +138,7 @@ class TrainDataset(Dataset):
     def image2Array(self, images):
         return [self.make_normal(imread(image)) for image in images]
     
-    def intensityMasker(self, x, equalize=False, treshold=120, b_treshold=0, c_treshold=0):# 120
+    def grayIntensity(self, x, equalize=False, treshold=120, b_treshold=0, c_treshold=0):# 120
         print(f'b_treshold: {b_treshold}')
         print(f'c_treshold: {c_treshold}')
          
@@ -167,7 +168,39 @@ class TrainDataset(Dataset):
             return (mask_image, big_mask)
         else:
             return None
-    
+
+
+    def channelIntensity(self,x, channel_tresholds=[0.75, 0.65, 0.65], channel='last', approach='max'):
+        if channel == 'last':
+            nc = x.shape[-1]
+            a, b, c = x[:,:,0], x[:,:,1], x[:,:,2]
+        else:
+            nc = x.shape[0]
+            a, b, c = x[0,:,:], x[1,:,:], x[2, :,:]
+
+        assert len(channel_tresholds) == nc, 'number of provided channel tresholds and number of channels is not the same'
+        aa = np.where(a>channel_tresholds[0],1,0)
+        bb = np.where(b>=channel_tresholds[1],1,0)
+        cc = np.where(c>=channel_tresholds[2],1,0)
+        dd = np.dstack((aa, bb, cc))
+
+        if approach == 'mode':
+            m_tensor = torch.from_numpy(dd)
+            m_tensor = m_tensor.mode(axis=-1, keepdim=True)
+            mask = m_tensor.values.squeeze().numpy().astype(np.uint8)
+        elif approach == 'max':
+            mask = np.max(dd, axis=-1)
+        elif approch == 'intersection':
+            mask = aa*bb*cc
+        mask_clean = cv2.morphologyEx(mask.astype(np.uint8),cv2.MORPH_OPEN,np.ones((3,3), int), iterations = 1)
+        big_mask = np.dstack([mask_clean]*self.nb_channels)
+
+        if np.sum(mask_clean)>=16:
+            mask_image = np.where(big_mask==1, x, big_mask)
+            return (mask_image, big_mask)
+        else:
+            None
+
     def ndviMasker(self, x, treshold=0.2):
         ndvi = self.NDVI(image=x, channel='last', normalize=False, func=True)
         mask = np.where(ndvi<=treshold,1,0).astype(np.uint8)
@@ -184,8 +217,10 @@ class TrainDataset(Dataset):
         if func == 'NDVI': # ndvi based tresholding
             masks = [self.ndviMasker(img, treshold=ndvi_treshold) for img in arrays] 
         else: # intensity based tresholding
-            masks = [self.intensityMasker(img, equalize=equalize, treshold=intensity_treshold, c_treshold=c_treshold, b_treshold=b_treshold) for img in arrays]
-            
+            if func == 'grayIntensity':
+                masks = [self.grayIntensity(img, equalize=equalize, treshold=intensity_treshold, c_treshold=c_treshold, b_treshold=b_treshold) for img in arrays]
+            else:
+                masks = [self.channelIntensity(img) for img in arrays]    # the function arguments need to sncronize with trainer functions but for know default value is ok
         masks = [mask for mask in masks if mask is not None]
         return masks
         

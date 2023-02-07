@@ -13,6 +13,6 @@ python3 ae_test.py\
     --lamda=0.9\
     --nb_channels=4\
     --params_id=100\
-    --dst_dir=/home/getch/ssl/DATA/SSL_VAE_aaaa/OUTS/Kule_tirkidi_jun_2018\
-    --data_dir=/home/getch/DATA/VAE/data/Kule_tirkidi_jun_2018\
+    --dst_dir=/home/getch/ssl/DATA/SSL_VAE_aaaa+/OUTS/Tza_oct_2016\
+    --data_dir=/home/getch/DATA/VAE/data/Tza_oct_2016\
 

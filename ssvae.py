@@ -192,8 +192,10 @@ class SSVAE(nn.Module):
         w_m = torch.sum(Mm[:,0,:,:],dim=(1,2))/base # [batch_n,] weight to balance contribution from modified region
         rec_normal = torch.mean(torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mn),dim=(1,2))*w_n)
         rec_modified = torch.mean(torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mm),dim=(1,2))*w_m)
-        rec_term = lambda_*rec_normal-(1-lambda_)*rec_modified  # just to follow Boers work
+        rec_term = lambda_*rec_normal+(1-lambda_)*rec_modified  # just to follow Boers work
         kld = torch.mean(self.kld())
+
+        # print(f'normal: {rec_normal.item()}, rec_mod: {rec_modified.item()}; rec_term: {rec_term.item()}; kld_term: {kld.item()}')
         
         L = (rec_term + 0.0001 * kld)
 
