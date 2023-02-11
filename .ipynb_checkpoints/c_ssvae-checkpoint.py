@@ -10,15 +10,16 @@ import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
 
-class SSVAE(nn.Module):
+class SS_CVAE(nn.Module):
     
-    def __init__(self, img_size, nb_channels, latent_img_size, z_dim, beta=0.1):
+    def __init__(self, img_size, nb_channels, latent_img_size, z_dim, beta=0.1, mask_nb_channel=4):
         '''
         '''
         super(SSVAE, self).__init__()
 
         self.img_size = img_size
-        self.nb_channels = nb_channels
+        self.mask_nb_channel = mask_nb_channel  # by default this would be the same as the number of channels of input image
+        self.nb_channels = nb_channels          # because the mask(y) will be be ingested to network
         self.latent_img_size = latent_img_size
         self.z_dim = z_dim
         self.beta = beta
@@ -27,9 +28,12 @@ class SSVAE(nn.Module):
         self.max_depth_conv = 2 ** (4 + self.nb_conv)
         print(f'Maximum depth conv: {self.max_depth_conv}')
         
+        self.entry_nb_channel = self.nb_channels + self.mask_nb_channel   # changed part
+        self.code_nb_channel = self.z_dim + self.mask_nb_channel # number of channels when we concatenate q(z|x,y) with y
+
         self.resnet = resnet34(pretrained=False) # resnet18(pretrained=False)
         self.resnet_entry = nn.Sequential(
-            nn.Conv2d(self.nb_channels, 64, kernel_size=7,
+            nn.Conv2d(self.entry_nb_channel, 64, kernel_size=7,
                 stride=2, padding=3, bias=False),
             self.resnet.bn1,
             self.resnet.relu,
@@ -62,11 +66,11 @@ class SSVAE(nn.Module):
         ) # self.max_depth_conv  repace 2048   128
 
         self.initial_decoder = nn.Sequential(
-            nn.ConvTranspose2d(self.z_dim, self.max_depth_conv,
+            nn.ConvTranspose2d(self.code_nb_channel, self.max_depth_conv,
                 kernel_size=1, stride=1, padding=0),
             nn.BatchNorm2d(self.max_depth_conv),
             nn.ReLU()
-        )
+        ) # self.z_dim is changed by self.code_nb_channel
             
         nb_conv_dec = self.nb_conv
 
@@ -75,7 +79,7 @@ class SSVAE(nn.Module):
             depth_in = 2 ** (4 + i + 1)
             depth_out = 2 ** (4 + i)
             if i == 0:
-                depth_out = self.nb_channels
+                depth_out = self.entry_nb_channel # self.nb_channels
                 self.decoder_layers.append(nn.Sequential(
                     nn.ConvTranspose2d(depth_in, depth_out, 4, 2, 1),
                 ))
@@ -102,20 +106,25 @@ class SSVAE(nn.Module):
         else:
             return mu
     
-    def decoder(self, z):
+    def decoder(self, z,y): # add how to input y to the decoder
+        y_copy = copy.deepcopy(y)  # to inegst y to gether with z
+        for i in range(self.nb_conv):
+            beta = nn.functional.max_pool2d(y_copy, 2)   # by assuming maxpooling is deterministic function
+        z = torch.cat((z,y_copy), dim=1)   
         z = self.initial_decoder(z)
         x = self.conv_decoder(z)
-        x = nn.Sigmoid()(x)
+        x = nn.Sigmoid()(x)  # this is p(x|y, zl) 
         return x
 
-    def forward(self, x):
-        mu, logvar = self.encoder(x)
-        z = self.reparameterize(mu, logvar)
+    def forward(self, x, y): # add how to include y to the saystem
+        xx = torch.cat((x,y), dim=1) # 
+        mu, logvar = self.encoder(xx)
+        z = self.reparameterize(mu, logvar)  # this is q(z|x,y)
         self.mu = mu
         self.logvar = logvar
-        return self.decoder(z), (mu, logvar)
+        return self.decoder(z,y), (mu, logvar)  # q(x|z,q(z|x,y))
 
-    def xent_continuous_ber(self, recon_x, x, gamma=1):
+    def xent_continuous_ber(self, recon_x, x):   # remove gamma may be
         ''' p(x_i|z_i) a continuous bernoulli '''
         eps = 1e-6
         def log_norm_const(x):
@@ -126,13 +135,7 @@ class SSVAE(nn.Module):
             return torch.log((2 * self.tarctanh(1 - 2 * x)) /
                             (1 - 2 * x) + eps)
         
-        recon_x = gamma * recon_x # like if we multiplied the lambda ?
-        return torch.sum(
-                    (x * torch.log(recon_x + eps) +
-                    (1 - x) * torch.log(1 - recon_x + eps) +
-                    log_norm_const(recon_x)),
-                    dim=(1)   # it use to be (1)
-                )
+        return x * torch.log(recon_x + eps) + (1 - x) * torch.log(1 - recon_x + eps) + log_norm_const(recon_x)
 
     def mean_from_lambda(self, l):
         ''' because the mean of a continuous bernoulli is not its lambda '''
@@ -141,14 +144,6 @@ class SSVAE(nn.Module):
             torch.ones_like(l))
         return l / (2 * l - 1) + 1 / (2 * self.tarctanh(1 - 2 * l))
 
-    def kld_m(self, beta=1): # kld loss with mask
-        # NOTE -kld actually
-        mu_ = self.mu.pow(2) * beta
-        logvar_ = self.logvar * beta
-        return 0.5 * torch.sum(
-                (1 + logvar_ - mu_ - logvar_.exp()),
-            dim=(1)#, 2, 3)
-        )
 
     def kld(self): # kld loss without mask
         return 0.5 * torch.sum(1 + self.logvar - self.mu.pow(2) - self.logvar.exp(),dim=(1))
@@ -157,90 +152,44 @@ class SSVAE(nn.Module):
     def tarctanh(self, x):
         return 0.5 * torch.log((1+x)/(1-x))
 
-    def compute_loss(self, x, xm, Mm, Mn, recon_x):
-        '''x: original input
-            xm: modified version of input x
+    def compute_loss(self, x, Mm, Mn, prob, recon_x):
+        '''x: modified input image, in Bauers paper both modified and normal image for loss computation |Rec_x-X|
             recon_x: recontructed image
             Mm: mask signifying modified regions
             Mn: Mask signifying normal areas
+            prob: probability of a pixel being 1 or 0, which is randomly generated values within [0,1]
+            as all pixels have equali probability of being 1 or 0
         '''
-        # A beta coefficient that will be pixel wise and that will be bigger
-        # for pixels of the mask which are very different between the original
-        # and modified version of x
-        gamma = Mn #self.beta + Mm * torch.abs(xm - x)
-        beta = Mn # Mm * torch.abs(xm - x)
-        beta_inv = Mm
-        for i in range(self.nb_conv):
-            beta = nn.functional.max_pool2d(beta, 2)
-            beta_inv = nn.functional.max_pool2d(beta_inv, 2)
-        beta = torch.mean(beta, axis=1)[:, None]
-        beta_inv = torch.mean(beta_inv, axis=1)[:, None]
-        #print(f'beta shape: {beta.shape}')
-        #plt.imshow(beta[0, 0].cpu().numpy())
-        #plt.savefig("mask.png")
-        #fs
         
-        
-        #rec_term = self.xent_continuous_ber(recon_x, x, gamma=gamma)
-        #rec_term = torch.mean(rec_term) # mean over the batch
-        #kld = torch.mean(self.kld_m(beta=beta)) # mean over the batch
-        #kld_inv = torch.mean(self.kld_m(beta=beta_inv))
 
-        base = 256*256
-        lambda_ = 0.9
-        w_n = torch.sum(Mn[:,0,:,:],dim=(1,2))/base # [batch_n,] weight to balance contribution from unmodified region
-        w_m = torch.sum(Mm[:,0,:,:],dim=(1,2))/base # [batch_n,] weight to balance contribution from modified region
+        P  = torch.where(xm==0, torch.log((1-prob)), torch.log(prob))
+        rec = self.xent_continuous_ber(recon_x, x)
 
-        #print(f'wn:{w_n} \n w_m: {w_m}')
+        rec_raw = torch.norm(Mn*(P+rec),1,dim=(1,)) + torch.norm(Mm*(P+rec),1, dim=(1,))  # the norm is computed on channel dim
 
-        rec_normal = torch.mean(torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mn),dim=(1,2))*w_n)
-        rec_modified = torch.mean(torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mm),dim=(1,2))*w_m)
-        rec_term = lambda_*rec_normal+(1-lambda_)*rec_modified  # just to follow Boers work
+        rec_term = torch.mean(rec_raw)
         kld = torch.mean(self.kld())
-
-        # print(f'normal: {rec_normal.item()}, rec_mod: {rec_modified.item()}; rec_term: {rec_term.item()}; kld_term: {kld.item()}')
         
-        L = (rec_term + 0.0001 * kld)
+        L = rec_term + kld
 
         loss = L
 
         loss_dict = {
             'loss': loss,
             'rec_term': rec_term,
-            'beta*kld': kld
+            'beta*kld': kld  # the key is left not to modif entire workflow
         }
-        #print(loss_dict)
 
         return loss, loss_dict
     
-    def new_rec_loss(self, x, xm, Mm, Mn, recon_x, lamda=0.1):# trested but not used 
-        '''x: original input
-        xm: modified version of input x
-        recon_x: recontructed image
-        Mm: mask signifying modified regions
-        Mn: Mask signifying normal areas
-        '''
-        rec_dif = recon_x-x   # Xrec-X
-        mod_dif = xm-x        # Xm-X
-        mod_dif_abs = torch.abs(mod_dif)   # |Xm-X|
-        
-        
-        top = Mn*rec_dif
-        buttom_ = Mm*rec_dif
-        buttom = mod_dif_abs*rec_dif
-        a = (lamda/torch.norm(Mn,1))*torch.norm(top,2)
-        b = ((1-lamda)/torch.norm(buttom_,1))*torch.norm(Mm*buttom,2)
-        loss = a-b
-
-        return loss
-
 
     def step(self, inputs): # inputs contain, modified image, normal image and mask
-        X, Xm, M, Mn = inputs
+        Xm, Mn, Mm, prob = inputs
         rec, _ = self.forward(Xm)
 
-        loss, loss_dict = self.compute_loss(x=X, xm=Xm, Mm=M, Mn=Mn, recon_x=rec)
+        loss, loss_dict = self.compute_loss(x=Xm, Mm=Mm, Mn=Mn, prob=prob, recon_x=rec)
 
         rec = self.mean_from_lambda(rec)
 
         return loss, rec, loss_dict
+
