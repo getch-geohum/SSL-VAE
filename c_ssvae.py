@@ -93,7 +93,8 @@ class SS_CVAE(nn.Module):
             *self.decoder_layers
         )
 
-    def encoder(self, x):
+    def encoder(self, x,y):
+        x = torch.cat((x,y), dim=1) 
         x = self.conv_encoder(x)
         x = self.final_encoder(x)
         return x[:, :self.z_dim], x[:, self.z_dim:]
@@ -116,9 +117,8 @@ class SS_CVAE(nn.Module):
         x = nn.Sigmoid()(x)  # this is p(x|y, zl) 
         return x
 
-    def forward(self, x, y): # add how to include y to the saystem
-        xx = torch.cat((x,y), dim=1) # 
-        mu, logvar = self.encoder(xx)
+    def forward(self, x, y): # add how to include y to the saystem 
+        mu, logvar = self.encoder(x,y)
         z = self.reparameterize(mu, logvar)  # this is q(z|x,y)
         self.mu = mu
         self.logvar = logvar
