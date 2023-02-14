@@ -13,16 +13,16 @@ python3 ae_train.py\
 	--lamda=0.9\
 	--nb_channels=4\
 	--params_id=100\
-	--ndvi_treshold=0.10\
+	--ndvi_treshold=0.1\
 	--intensity_treshold=120\
 	--brightness_treshold=0\
 	--contrast_treshold=0\
-	--func=channelIntensity\
-	--dst_dir=/home/getch/ssl/DATA/SSL_VAE_aaaa+/OUTS/Kutuplong_dec_2017\
-        --data_dir=/home/getch/DATA/VAE/data/Kutuplong_dec_2017\
+	--func=NDVI\
+	--dst_dir=/home/getch/ssl/DATA/SSL_VAE_aaaa+/OUTS/Minawao_june_2016\
+        --data_dir=/home/getch/DATA/VAE/data/Minawao_june_2016\
 	--force_train\
-    --with_mask\
-    --with_prob\
+	--with_mask\
+	--with_prob\
 	#--equalize\
 
 # equalize should be active if func=intensity and if we want to run histogra, equaliation

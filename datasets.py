@@ -99,8 +99,8 @@ def channelIntensity(self,x, channel_tresholds=[0.75, 0.65, 0.65], channel='last
         None
         
         
-def ndviMasker(x, treshold=0.2):
-    ndvi = NDVI(image=x, channel='last', normalize=False, func=True, nb_channels=4)
+def ndviMasker(x, treshold=0.2, nb_channels=None):
+    ndvi = NDVI(image=x, channel='last', normalize=False, func=True)
     mask = np.where(ndvi<=treshold,1,0).astype(np.uint8)
     mask_clean = cv2.morphologyEx(mask,cv2.MORPH_OPEN,np.ones((3,3), int), iterations = 1) 
     big_mask = np.dstack([mask_clean]*nb_channels) 
@@ -241,9 +241,9 @@ class TrainDataset(Dataset):
         msk = self.mask[index]      # mask for modified image region
         msk_iv = self.mask_inv[index] # mask for unmodified region
         if self.with_prob:
-            p = torch.rand(256,256)     # this P which is teh probability of a pixel being 0 or 1
-            p = torch.cat([p]*self.nb_channels)  # duplicate channels for element wise multiplication 
-            return self.transform(mdf), self.transform(msk), self.transform(msk_iv), p # self.transform(nrm)
+            p = np.where(msk == 1, np.sum(msk, axis=-1)/(256*256*self.nb_channels), 1-np.sum(msk,axis=-1)/(256*256*self.nb_channels))     # this P which is teh probability of a pixel being 0 or 1
+            p = np.concatenat([p]*self.nb_channels)  # duplicate channels for element wise multiplication 
+            return self.transform(mdf), self.transform(msk), self.transform(msk_iv), self.transform(p) # nrm
         else:
             return self.transform(mdf), self.transform(msk), self.transform(msk_iv)
     
@@ -270,6 +270,8 @@ class TestDataset(Dataset):
         self.test_path = f'{root}/test'
         self.with_mask = with_mask
         self.nb_channels = nb_channels
+        self.c_treshold = c_treshold
+        self.b_treshold = b_treshold
         
         self.img_dir = sorted(glob(f'{self.test_path}/images/*.tif'))
         self.lbl_dir = sorted(glob(f'{self.test_path}/labels/*.tif'))
@@ -308,7 +310,7 @@ class TestDataset(Dataset):
         else:
             return [make_normal(imread(image).astype(float)) for image in images]
         
-    def computeMask(self, files, func='NDVI', ndvi_treshold=None, intensity_treshold=None, equalize=None, c_treshold=None, b_treshold=None, nb_channels):
+    def computeMask(self, files, func='NDVI', ndvi_treshold=None, intensity_treshold=None, equalize=None, c_treshold=None, b_treshold=None, nb_channels=None):
         arrays = self.image2Array(files)
         if func == 'NDVI': 
             masks = [ndviMasker(img, treshold=ndvi_treshold, nb_channels=nb_channels) for img in arrays] 
@@ -318,7 +320,7 @@ class TestDataset(Dataset):
             else:
                 print("========================================")
                 masks = [channelIntensity(img, nb_channels=nb_channels) for img in arrays]    
-        masks = [mask for mask in masks if mask is not None else np.zeros((256,256,nb_channels), dtype=np.uint8)]
+        masks = [mask for mask if mask is not None else np.zeros((256,256,nb_channels), dtype=np.uint8) for mask in masks]
         return masks
         
     def __len__(self):

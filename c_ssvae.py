@@ -15,7 +15,7 @@ class SS_CVAE(nn.Module):
     def __init__(self, img_size, nb_channels, latent_img_size, z_dim, beta=0.1, mask_nb_channel=4):
         '''
         '''
-        super(SSVAE, self).__init__()
+        super(SS_CVAE, self).__init__()
 
         self.img_size = img_size
         self.mask_nb_channel = mask_nb_channel  # by default this would be the same as the number of channels of input image
@@ -79,7 +79,7 @@ class SS_CVAE(nn.Module):
             depth_in = 2 ** (4 + i + 1)
             depth_out = 2 ** (4 + i)
             if i == 0:
-                depth_out = self.entry_nb_channel # self.nb_channels
+                depth_out = self.nb_channels  # self.entry_nb_channel
                 self.decoder_layers.append(nn.Sequential(
                     nn.ConvTranspose2d(depth_in, depth_out, 4, 2, 1),
                 ))
@@ -162,10 +162,10 @@ class SS_CVAE(nn.Module):
         '''
                 
 
-        P  = torch.where(xm==0, torch.log((1-prob)), torch.log(prob))
+        P  = torch.where(Mm==0, torch.log((1-prob)), torch.log(prob))
         rec = self.xent_continuous_ber(recon_x, x)
 
-        rec_raw = torch.norm(Mn*(P+rec),1,dim=(1,)) + torch.norm(Mm*(P+rec),1, dim=(1,))  # the norm is computed on channel dim
+        rec_raw = torch.sum(Mn*(P+rec),1,dim=(1)) + torch.sum(Mm*(P+rec),1, dim=(1))  # the norm is computed on channel dim
 
         rec_term = torch.mean(rec_raw)
         kld = torch.mean(self.kld())

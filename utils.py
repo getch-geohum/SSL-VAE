@@ -123,8 +123,8 @@ def get_test_dataloader(args, fake_dataset_size=None): # categ=None is added
                                    ndvi_treshold=args.ndvi_treshold,
                                    intensity_treshold=args.intensity_treshold,
                                    nb_channels=args.nb_channels,
-                                   c_treshold=args.c_treshold,
-                                   b_treshold=args.b_treshold,
+                                   c_treshold=args.contrast_treshol,
+                                   b_treshold=args.brightness_treshold,
                                    with_mask=args.with_mask)
         print(f'Test datset size: {len(test_dataset)}')
     else:
