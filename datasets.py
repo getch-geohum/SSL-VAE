@@ -236,14 +236,14 @@ class TrainDataset(Dataset):
         return len(self.normal)
 
     def __getitem__(self, index):
-        # nrm = self.normal[index]
+        nrm = self.normal[index]
         mdf = self.modified[index]  # modified image
         msk = self.mask[index]      # mask for modified image region
         msk_iv = self.mask_inv[index] # mask for unmodified region
         if self.with_prob:
-            p = np.where(msk == 1, np.sum(msk, axis=-1)/(256*256*self.nb_channels), 1-np.sum(msk,axis=-1)/(256*256*self.nb_channels))     # this P which is teh probability of a pixel being 0 or 1
-            p = np.concatenat([p]*self.nb_channels)  # duplicate channels for element wise multiplication 
-            return self.transform(mdf), self.transform(msk), self.transform(msk_iv), self.transform(p) # nrm
+            p = np.where(msk[:,:,0] == 1, np.sum(msk)/(256*256), 1-np.sum(msk)/(256*256))     # this P which is teh probability of a pixel being 0 or 1
+            p = np.dstack([p]*self.nb_channels)  # duplicate channels for element wise multiplication 
+            return self.transform(nrm),  self.transform(mdf), self.transform(msk), self.transform(msk_iv), self.transform(p) # nrm
         else:
             return self.transform(mdf), self.transform(msk), self.transform(msk_iv)
     

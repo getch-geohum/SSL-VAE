@@ -22,16 +22,17 @@ def train(model, train_loader, device, optimizer, epoch):
     loss_dict = {}
     controler = 0
 
-    for batch_idx, (a, b, c, d) in enumerate(train_loader):
+    for batch_idx, (a, b, c, d, e) in enumerate(train_loader):
         print(batch_idx + 1, end=", ", flush=True)
         a = a.to(device) 
         b = b.to(device)
         c = c.to(device)
         d = d.to(device)
+        e = e.to(device)
         optimizer.zero_grad(set_to_none=True)   # otherwise grads accumulate in backward
 
         loss, rec_im, loss_dict_new = model.step(
-            (a, b, c, d)
+            (a, b, c, d, e)
         )
 
 
