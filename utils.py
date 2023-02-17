@@ -3,6 +3,7 @@ import os
 import matplotlib.pyplot as plt
 import torchvision
 import torch
+from torch.utils.data import DataLoader
 from datasets import *
 from AE import SSAE
 from ssvae import SSVAE
@@ -65,8 +66,8 @@ def load_ssae(args):
             nb_channels=args.nb_channels,
         )
     if args.model == "ss_cvae":
-        print(f'with specified model param { args.model}: self-supervised variational autoencoder will be loaded')
-        model = SSVAE(latent_img_size=args.latent_img_size,
+        print(f'with specified model param { args.model}: self-supervised conditional variational autoencoder will be loaded')
+        model = SS_CVAE(latent_img_size=args.latent_img_size,
                       z_dim=args.z_dim,
                       img_size=args.img_size,
                       nb_channels=args.nb_channels,
@@ -108,7 +109,7 @@ def get_train_dataloader(args):
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=12,
+        num_workers=2,
         drop_last=True
     )
 
@@ -123,7 +124,7 @@ def get_test_dataloader(args, fake_dataset_size=None): # categ=None is added
                                    ndvi_treshold=args.ndvi_treshold,
                                    intensity_treshold=args.intensity_treshold,
                                    nb_channels=args.nb_channels,
-                                   c_treshold=args.contrast_treshol,
+                                   c_treshold=args.contrast_treshold,
                                    b_treshold=args.brightness_treshold,
                                    with_mask=args.with_mask)
         print(f'Test datset size: {len(test_dataset)}')
@@ -133,7 +134,7 @@ def get_test_dataloader(args, fake_dataset_size=None): # categ=None is added
     test_dataloader = DataLoader(
         test_dataset,
         batch_size=args.batch_size_test,
-        num_workers=12,
+        num_workers=2,
         drop_last=True
     )  # 
 

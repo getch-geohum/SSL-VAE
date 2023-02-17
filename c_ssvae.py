@@ -9,6 +9,7 @@ from torchvision import transforms
 import matplotlib
 matplotlib.use('TkAgg')
 import matplotlib.pyplot as plt
+import copy
 
 class SS_CVAE(nn.Module):
     
@@ -28,8 +29,8 @@ class SS_CVAE(nn.Module):
         self.max_depth_conv = 2 ** (4 + self.nb_conv)
         print(f'Maximum depth conv: {self.max_depth_conv}')
         
-        #self.entry_nb_channel = self.nb_channels + self.mask_nb_channel   # changed part
-        #self.code_nb_channel = self.z_dim + self.mask_nb_channel # number of channels when we concatenate q(z|x,y) with y
+        self.entry_nb_channel = self.nb_channels + self.mask_nb_channel   # changed part
+        self.code_nb_channel = self.z_dim + self.mask_nb_channel # number of channels when we concatenate q(z|x,y) with y
 
         self.resnet = resnet34(pretrained=False) # resnet18(pretrained=False)
         self.resnet_entry = nn.Sequential(
@@ -94,7 +95,7 @@ class SS_CVAE(nn.Module):
         )
 
     def encoder(self, x):
-        #x = torch.cat((x,y), dim=1) 
+        # x = torch.cat((x,y), dim=1)
         x = self.conv_encoder(x)
         x = self.final_encoder(x)
         return x[:, :self.z_dim], x[:, self.z_dim:]
@@ -108,16 +109,16 @@ class SS_CVAE(nn.Module):
             return mu
     
     def decoder(self, z): # add how to input y to the decoder
-        #y_copy = copy.deepcopy(y)  # to inegst y to gether with z
-        #for i in range(self.nb_conv):
-        ##    beta = nn.functional.max_pool2d(y_copy, 2)   # by assuming maxpooling is deterministic function
-        #z = torch.cat((z,y_copy), dim=1)   
+        # y_copy = copy.deepcopy(y)  # to inegst y to gether with z
+        # for i in range(self.nb_conv):
+        #     y_copy = nn.functional.max_pool2d(y_copy, 2)   # by assuming maxpooling is deterministic function
+        # z = torch.cat((z,y_copy), dim=1)
         z = self.initial_decoder(z)
         x = self.conv_decoder(z)
         x = nn.Sigmoid()(x)  # this is p(x|y, zl) 
         return x
 
-    def forward(self, x): # add how to include y to the saystem 
+    def forward(self, x): # add how to include y to the saystem
         mu, logvar = self.encoder(x)
         z = self.reparameterize(mu, logvar)  # this is q(z|x,y)
         self.mu = mu
@@ -152,7 +153,7 @@ class SS_CVAE(nn.Module):
     def tarctanh(self, x):
         return 0.5 * torch.log((1+x)/(1-x))
 
-    def compute_loss(self, x, Mm, Mn, prob, recon_x):
+    def compute_loss(self,X, Mm, Mn, prob, recon_x):
         '''x: modified input image, in Bauers paper both modified and normal image for loss computation |Rec_x-X|
             recon_x: recontructed image
             Mm: mask signifying modified regions
@@ -160,25 +161,37 @@ class SS_CVAE(nn.Module):
             prob: probability of a pixel being 1 or 0, which is randomly generated values within [0,1]
             as all pixels have equali probability of being 1 or 0
         '''
-                
+
+        base = 256 * 256
+        w_n = torch.sum(Mn[:, 0, :, :], dim=(1,2)) / base  # [batch_n,] weight
+        w_m = torch.sum(Mm[:, 0, :, :], dim=(1,2)) / base
+        lamda = 0.9
 
         P  = torch.where(Mm==0, torch.log((1-prob)), torch.log(prob))
-        rec = self.xent_continuous_ber(recon_x, x)
+        rec = self.xent_continuous_ber(recon_x, X)
 
-        rec_raw = torch.sum(Mn*(P+rec),dim=(1)) + torch.sum(Mm*(P+rec), dim=(1))
+        rec_raw = torch.sum(Mn*(P+rec),dim=(1)) + torch.sum(Mm*(P+rec),dim=(1))  # the norm is computed on channel dim
+        #rec_raw = lamda*torch.mean(torch.sum(Mn*(rec+P), dim=(1)), dim=(1,2))*w_n + (1-lamda)*torch.mean(torch.sum(Mm * (rec+P), dim=(1)),dim=(1,2))*w_m  # the reduction is computed on channel dim
 
         rec_term = torch.mean(rec_raw)
         kld = torch.mean(self.kld())
-        
-        L = rec_term + kld
+
+        L = sum([rec_term, 0.001*kld])
+
+        # kk = rec_term.item() + kld.item()
+
 
         loss = L
+
+        # print(f"KLD: {kld}")
+        # print(f"recterm: {rec_term}")
+        # print(f"Total: {L}")
 
         loss_dict = {
             'loss': loss,
             'rec_term': rec_term,
-            'beta*kld': kld  # the key is left not to modif entire workflow
-        }
+            'beta*kld': kld
+        } # the key is left not to modif entire workflow
 
         return loss, loss_dict
     
@@ -187,7 +200,7 @@ class SS_CVAE(nn.Module):
         X, Xm, Mm, Mn, prob = inputs
         rec, _ = self.forward(Xm)
 
-        loss, loss_dict = self.compute_loss(x=X, Mm=Mm, Mn=Mn, prob=prob, recon_x=rec) # x=X is based on Bauers article
+        loss, loss_dict = self.compute_loss(X=Xm, Mm=Mm, Mn=Mn, prob=prob, recon_x=rec)
 
         rec = self.mean_from_lambda(rec)
 

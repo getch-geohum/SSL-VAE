@@ -1,9 +1,9 @@
 #!/bin/bash
 
-python3 ae_train.py\
+python ae_train.py\
 	--model=ss_cvae\
-	--exp=vae_vae\
-	--num_epochs=200\
+	--exp=ss_cvae\
+	--num_epochs=100\
 	--lr=1e-4\
 	--img_size=256\
 	--batch_size=16\
@@ -13,16 +13,16 @@ python3 ae_train.py\
 	--lamda=0.9\
 	--nb_channels=4\
 	--params_id=100\
-	--ndvi_treshold=0.1\
+	--ndvi_treshold=0.3\
 	--intensity_treshold=120\
 	--brightness_treshold=0\
 	--contrast_treshold=0\
 	--func=NDVI\
-	--dst_dir=/home/getch/ssl/DATA/SSL_VAE_aaaa+/OUTS/Minawao_june_2016\
-        --data_dir=/home/getch/DATA/VAE/data/Minawao_june_2016\
+	--dst_dir=D:/DATA/OUTS_ccccd\
+        --data_dir=D:/DATA/Minawao_feb_2017\
+        --with_mask\
+        --with_prob\
 	--force_train\
-	--with_mask\
-	--with_prob\
 	#--equalize\
 
 # equalize should be active if func=intensity and if we want to run histogra, equaliation

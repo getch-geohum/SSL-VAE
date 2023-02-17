@@ -14,7 +14,6 @@ import sys
 from utils import * 
 
 
-
 def train(model, train_loader, device, optimizer, epoch):
 
     model.train()
@@ -22,7 +21,9 @@ def train(model, train_loader, device, optimizer, epoch):
     loss_dict = {}
     controler = 0
 
-    for batch_idx, (a, b, c, d, e) in enumerate(train_loader):
+    print("Looks grate, go ahead!........................")
+    for batch_idx, (a, b, c, d, e) in enumerate(train_loader): # xm/x, Mm, Mn, prob
+        # print(f"Shape of a is: {a.shape}")
         print(batch_idx + 1, end=", ", flush=True)
         a = a.to(device) 
         b = b.to(device)
@@ -35,12 +36,12 @@ def train(model, train_loader, device, optimizer, epoch):
             (a, b, c, d, e)
         )
 
-
         if type(model) is SSAE:
             loss.backward()
-        elif type(model) is SSVAE:
+        elif type(model) is SSVAE or type(model) is SS_CVAE:
             (-loss).backward()
         train_loss += loss.item()
+        print(f"Step loss: {loss.item()}")
         loss_dict = update_loss_dict(loss_dict, loss_dict_new)   # update_loss_dict need fixation
         optimizer.step()
         controler+=1
@@ -52,20 +53,22 @@ def train(model, train_loader, device, optimizer, epoch):
 def eval(model, test_loader, device, with_mask=False):
     model.eval()
     if with_mask:  # added to acommodate q(z|x,y) and q(x|y,zl)
-        input_mb, gt_mb, msk_mb = iter(test_loader).next()
-        msk_mb.to(device)
+        input_mb, gt_mb = next(iter(test_loader)) # .next()
+        input_mb = input_mb.to(device)
+        # msk_mb = msk_mb.to(device)
+        # gt_mb = gt_mb.to(device)
     else:
-        input_mb, gt_mb = iter(test_loader).next()
-    gt_mb = gt_mb.to(device)
-    input_mb = input_mb.to(device)
+        input_mb, gt_mb = next(iter(test_loader)) # .next()
+        # gt_mb = gt_mb.to(device)
+        input_mb = input_mb.to(device)
     if type(model) is SSAE:
         recon_mb = model(input_mb)
-    elif type(model) is SSVAE:
+    elif type(model) is SS_CVAE or type(model) is SSVAE:
         if with_mask:
-            recon_mb, _ = model(input_mb,msk_mb)
+            recon_mb, _ = model(input_mb)
         else:
             recon_mb, _ = model(input_mb)
-        recon_mb = model.mean_from_lambda(recon_mb)
+    recon_mb = model.mean_from_lambda(recon_mb)
     return input_mb, recon_mb, gt_mb
 
 
@@ -119,6 +122,7 @@ def main(args):
             print(f'Force train enforced: {args.force_train}')
             #print(f'Force train no enforced: {args.force_train}')
             raise FileNotFoundError
+
         file_name = f"{args.exp}_{args.params_id}.pth"
         model = load_model_parameters(model, file_name, checkpoints_dir, checkpoints_saved_dir, device)
     except FileNotFoundError:
@@ -133,7 +137,7 @@ def main(args):
                     device=device,
                     optimizer=optimizer,
                     epoch=epoch)
-            print(f'epoch [{epoch+1}/{args.num_epochs}], train loss: {round(loss,4)}')
+            print(f'epoch [{epoch+1}/{args.num_epochs}], train loss: {round(loss,6)}')
 
             f_name = os.path.join(out_dir, f"{args.exp}_loss_values.txt")
             print_loss_logs(f_name, out_dir, loss_dict, epoch, args.exp)   # 

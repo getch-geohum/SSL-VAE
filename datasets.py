@@ -86,7 +86,7 @@ def channelIntensity(self,x, channel_tresholds=[0.75, 0.65, 0.65], channel='last
         mask = m_tensor.values.squeeze().numpy().astype(np.uint8)
     elif approach == 'max':
         mask = np.max(dd, axis=-1)
-    elif approch == 'intersection':
+    elif approach == 'intersection':
         mask = aa*bb*cc
     mask_clean = cv2.morphologyEx(mask.astype(np.uint8),cv2.MORPH_OPEN,np.ones((3,3), int), iterations = 1)
     big_mask = np.dstack([mask_clean]*nb_channels)
@@ -110,13 +110,14 @@ def ndviMasker(x, treshold=0.2, nb_channels=None):
     else:
         return None    
 
-        
 def im_blurr(img, factor=16):
     img_down = rescale(img, 1/factor, multichannel=True, anti_aliasing=True)
     blur = rescale(img_down, factor, multichannel=True, anti_aliasing=True)
     assert img.shape == blur.shape
     return blur
 
+def toFloat(x):
+    return x.float()
 
 class TrainDataset(Dataset):
     def __init__(
@@ -212,7 +213,8 @@ class TrainDataset(Dataset):
         
         self.transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Lambda(lambda img: img.float())
+            transforms.Lambda(toFloat)
+            #transforms.Lambda(lambda img: img.float())
         ])
 
     
@@ -241,11 +243,12 @@ class TrainDataset(Dataset):
         msk = self.mask[index]      # mask for modified image region
         msk_iv = self.mask_inv[index] # mask for unmodified region
         if self.with_prob:
-            p = np.where(msk[:,:,0] == 1, np.sum(msk)/(256*256), 1-np.sum(msk)/(256*256))     # this P which is teh probability of a pixel being 0 or 1
-            p = np.dstack([p]*self.nb_channels)  # duplicate channels for element wise multiplication 
-            return self.transform(nrm),  self.transform(mdf), self.transform(msk), self.transform(msk_iv), self.transform(p) # nrm
+            p = np.where(msk[:,:,0] == 1, np.sum(msk[:,:,0])/(256*256), 1-(np.sum(msk[:,:,0])/(256*256)))     # this P which is teh probability of a pixel being 0 or 1
+            p = np.dstack([p]*self.nb_channels)  # duplicate channels for element wise multiplication
+            #print(f"shape of the probability raster is: {p.shape}")
+            return self.transform(nrm), self.transform(mdf), self.transform(msk), self.transform(msk_iv), self.transform(p) # nrm
         else:
-            return self.transform(mdf), self.transform(msk), self.transform(msk_iv)
+            return self.transform(nrm), self.transform(mdf), self.transform(msk), self.transform(msk_iv)
     
     
 class TestDataset(Dataset):
@@ -301,7 +304,9 @@ class TestDataset(Dataset):
         
         self.transform = transforms.Compose([
             transforms.ToTensor(),
-            transforms.Lambda(lambda img: img.float())])
+            transforms.Lambda(toFloat)
+            #transforms.Lambda(lambda img: img.float())
+        ])
 
     
     def image2Array(self, images, normalize=False):
@@ -320,7 +325,7 @@ class TestDataset(Dataset):
             else:
                 print("========================================")
                 masks = [channelIntensity(img, nb_channels=nb_channels) for img in arrays]    
-        masks = [mask for mask if mask is not None else np.zeros((256,256,nb_channels), dtype=np.uint8) for mask in masks]
+        masks = [mask if mask is not None else np.zeros((256,256,nb_channels), dtype=np.uint8) for mask in masks]
         return masks
         
     def __len__(self):
@@ -332,8 +337,11 @@ class TestDataset(Dataset):
         if not self.with_mask:
             return self.transform(img), self.transform(lbl)
         else:
-            msk = self.mask_array[index]
-            return self.transform(img), self.transform(lbl), self.transform(msk)
+            msk = self.mask_array[index][1]
+            # print(f"type of mask: {type(msk)}")
+            # print(f"type of label: {type(lbl)}")
+            # print(f"type of image: {type(img)}")
+            return self.transform(img), self.transform(lbl) #, self.transform(msk)
 
 
 
