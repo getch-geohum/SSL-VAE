@@ -1,31 +1,34 @@
 #!/bin/bash
 
 python ae_train.py\
-	--model=ss_cvae\
-	--exp=ss_cvae\
-	--num_epochs=100\
-	--lr=1e-4\
-	--img_size=256\
-	--batch_size=16\
-	--batch_size_test=8\
-	--latent_img_size=32\
-	--z_dim=256\
-	--lamda=0.9\
-	--nb_channels=4\
-	--params_id=100\
-	--ndvi_treshold=0.3\
-	--intensity_treshold=120\
-	--brightness_treshold=0\
-	--contrast_treshold=0\
-	--func=NDVI\
-	--dst_dir=D:/DATA/OUTS_ccccd\
-        --data_dir=D:/DATA/Minawao_feb_2017\
+	--model=mv_ae\
+        --exp=mv_ae\
+        --num_epochs=100\
+        --lr=1e-4\
+        --img_size=512\
+        --batch_size=8\
+        --batch_size_test=4\
+        --latent_img_size=32\
+        --z_dim=256\
+        --lamda=0.9\
+        --nb_channels=3\
+        --params_id=100\
+        --ndvi_treshold=0.1\
+        --intensity_treshold=145\
+        --brightness_treshold=0\
+        --contrast_treshold=0\
+        --func=NDVI\
+        --dst_dir=D:/DATA/MVTec/carpet\
+        --data_dir=D:/DATA/rawdata/mvtec\
+        --max_beta=0.1\
+	--min_beta=0.00001\
+	--dataset=mvtec\
+	--texture=carpet\
         --with_mask\
-        --with_prob\
-	--force_train\
-	#--equalize\
+        --force_train\
+        --equalize\
+	--anneal_beta\
+	--anneal2descend\
+	--with_prob\
 
-# equalize should be active if func=intensity and if we want to run histogra, equaliation
-# if contrast_treshold is greater than zero, brightness_treshold should be zero and vice versa
-# if brightness treshold is zer0, contrast_treshold should be 11      
-# these tresholds were only tested in Nguyen_march_2017
+# dataset could be either "camp" or "mvtec"
