@@ -5,9 +5,11 @@ import torchvision
 import torch
 from torch.utils.data import DataLoader
 from datasets import *
+from mvtec_dataset import MvtechTrainDataset, MvtechTestDataset
 from AE import SSAE
 from ssvae import SSVAE
 from c_ssvae import SS_CVAE
+from mvtec_models import SS_AEmvtec, SS_CVAEmvtec
 import time
 import argparse
 import matplotlib
@@ -47,9 +49,26 @@ def parse_args():
     parser.add_argument("--with_mask", help='Whether to return the mask during testing phase', dest='with_mask', action='store_true')
     parser.set_defaults(with_mask=False) # c_treshold
 
+    parser.add_argument("--max_beta", help="Beta term for kld annealing, if anneal if true, it will progress from min_beta", default=0.5, type=float)
+    parser.add_argument("--min_beta", help="Base beta value for kld annealing", default=0.0, type=float)
+    parser.add_argument("--anneal_beta", help='Whether to anneal beta or not', dest='anneal_beta',action='store_true')
+    parser.set_defaults(anneal_beta=False)  # save_preds
+
+    parser.add_argument("--anneal2descend", help='Whether to increase or decrease the kld annealing', dest='anneal2descend',action='store_true')
+    parser.set_defaults(anneal2descend=False)
+
+    parser.add_argument("--save_preds", help='Whether to save predicted images during tesing phase', dest='save_preds',action='store_true')
+    parser.set_defaults(save_preds=False)
+
+    parser.add_argument("--dataset", help="Train test dataset type, either of 'camp' or 'mvtec' ", type=str, default='camp')
+    parser.add_argument("--texture", help="One of the texture classes from MVtech dataset or 'all' ", type=str, default='carpet')
     return parser.parse_args()
 
 def load_ssae(args):
+    if args.model == 'mv_ae':
+        model = SS_AEmvtec(zdim=args.z_dim)
+    if args.model == 'mv_cvae':
+        model = SS_CVAEmvtec(zdim=args.z_dim)
     if args.model == "ssae":
         print(f'with specified model param { args.model}: self-supervised autoencoder will be loaded')
         model = SSAE(latent_img_size=args.latent_img_size,
@@ -66,13 +85,13 @@ def load_ssae(args):
             nb_channels=args.nb_channels,
         )
     if args.model == "ss_cvae":
-        print(f'with specified model param { args.model}: self-supervised conditional variational autoencoder will be loaded')
+        print(f'with specified model param { args.model} without kld annealing: self-supervised conditional variational autoencoder will be loaded')
         model = SS_CVAE(latent_img_size=args.latent_img_size,
-                      z_dim=args.z_dim,
-                      img_size=args.img_size,
-                      nb_channels=args.nb_channels,
-                      mask_nb_channel=args.nb_channels
-        )
+                z_dim=args.z_dim,
+                img_size=args.img_size,
+                nb_channels=args.nb_channels,
+                mask_nb_channel=args.nb_channels
+                )
 
     return model
 
@@ -90,18 +109,23 @@ def get_train_dataloader(args):
     print(f'The histogram equalizaion is set to: {args.equalize}')
     print(f'The ndvi treshold is set to: {args.ndvi_treshold}')
     if os.path.exists(args.data_dir):
-        train_dataset = TrainDataset(
-            root=args.data_dir,
-            func=args.func,
-            equalize=args.equalize,
-            nb_channels=args.nb_channels,
-            ndvi_treshold=args.ndvi_treshold,
-            intensity_treshold=args.intensity_treshold,
-            fake_dataset_size=1024,
-            c_treshold=args.contrast_treshold,
-            b_treshold=args.brightness_treshold,
-            with_prob=args.with_prob
-        )
+        if args.dataset == 'camp':
+            print('CAMP dataset will be loaded for training')
+            train_dataset = TrainDataset(
+                root=args.data_dir,
+                func=args.func,
+                equalize=args.equalize,
+                nb_channels=args.nb_channels,
+                ndvi_treshold=args.ndvi_treshold,
+                intensity_treshold=args.intensity_treshold,
+                fake_dataset_size=1024,
+                c_treshold=args.contrast_treshold,
+                b_treshold=args.brightness_treshold,
+                with_prob=args.with_prob
+                )
+        else:
+            print('MVtECH dataset will be loaded for training')
+            train_dataset = MvtechTrainDataset(root=args.data_dir, texture=args.texture, with_prob=args.with_prob)
     else:
         raise RuntimeError("No / Wrong file folder provided")
 
@@ -109,7 +133,7 @@ def get_train_dataloader(args):
         train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
-        num_workers=2,
+        num_workers=12,
         drop_last=True
     )
 
@@ -117,7 +141,8 @@ def get_train_dataloader(args):
 
 def get_test_dataloader(args, fake_dataset_size=None): # categ=None is added
     if os.path.exists(args.data_dir):
-        test_dataset = TestDataset(args.data_dir,
+        if args.dataset == 'camp':
+            test_dataset = TestDataset(args.data_dir,
                                    fake_dataset_size=fake_dataset_size,
                                    func=args.func,
                                    equalize=args.equalize,
@@ -127,14 +152,17 @@ def get_test_dataloader(args, fake_dataset_size=None): # categ=None is added
                                    c_treshold=args.contrast_treshold,
                                    b_treshold=args.brightness_treshold,
                                    with_mask=args.with_mask)
-        print(f'Test datset size: {len(test_dataset)}')
+            print(f'Camp test datset size: {len(test_dataset)}')
+        else:
+            test_dataset = MvtechTestDataset(root=args.data_dir, texture=args.texture, fake_dataset_size=fake_dataset_size)
+            print(f'Mvtech test datset size: {len(test_dataset)}')
     else:
         raise RuntimeError("No / Wrong file folder provided")
 
     test_dataloader = DataLoader(
         test_dataset,
         batch_size=args.batch_size_test,
-        num_workers=2,
+        num_workers=12,
         drop_last=True
     )  # 
 

@@ -14,7 +14,7 @@ import sys
 from utils import * 
 
 
-def train(model, train_loader, device, optimizer, epoch):
+def train(model, train_loader, device, optimizer, beta):
 
     model.train()
     train_loss = 0
@@ -30,15 +30,21 @@ def train(model, train_loader, device, optimizer, epoch):
         c = c.to(device)
         d = d.to(device)
         e = e.to(device)
+
         optimizer.zero_grad(set_to_none=True)   # otherwise grads accumulate in backward
 
-        loss, rec_im, loss_dict_new = model.step(
-            (a, b, c, d, e)
-        )
+        #loss, rec_im, loss_dict_new = model.step(
+        #    (a, b, c, d, e), beta=beta)
 
-        if type(model) is SSAE:
+        if type(model) is SSAE or type(model) is SS_AEmvtec:
+            loss, rec_im, loss_dict_new = model.step(
+            (a, b, c, d))
+
             loss.backward()
-        elif type(model) is SSVAE or type(model) is SS_CVAE:
+        elif type(model) is SSVAE or type(model) is SS_CVAE or type(model) is SS_CVAEmvtec:
+            loss, rec_im, loss_dict_new = model.step(
+            (a, b, c, d, e), beta=beta)
+
             (-loss).backward()
         train_loss += loss.item()
         print(f"Step loss: {loss.item()}")
@@ -61,14 +67,14 @@ def eval(model, test_loader, device, with_mask=False):
         input_mb, gt_mb = next(iter(test_loader)) # .next()
         # gt_mb = gt_mb.to(device)
         input_mb = input_mb.to(device)
-    if type(model) is SSAE:
+    if type(model) is SSAE or SS_AEmvtec:
         recon_mb = model(input_mb)
-    elif type(model) is SS_CVAE or type(model) is SSVAE:
+    elif type(model) is SS_CVAE or type(model) is SSVAE or type(model) is SS_CVAEmvtec:
         if with_mask:
             recon_mb, _ = model(input_mb)
         else:
             recon_mb, _ = model(input_mb)
-    recon_mb = model.mean_from_lambda(recon_mb)
+        recon_mb = model.mean_from_lambda(recon_mb)
     return input_mb, recon_mb, gt_mb
 
 
@@ -92,7 +98,6 @@ def main(args):
         args,
         fake_dataset_size=16
     )
-    
 
     nb_channels = args.nb_channels
 
@@ -102,7 +107,6 @@ def main(args):
 
     print("Nb channels", nb_channels, "img_size", img_size, 
         "mini batch size", batch_size)
-
 
     out_dir = args.dst_dir + '/torch_logs' # './torch_logs' 
     if not os.path.isdir(out_dir):
@@ -117,73 +121,91 @@ def main(args):
     if not os.path.isdir(data_dir):
         os.makedirs(data_dir, exist_ok=True)
         
-    try:
-        if args.force_train:
-            print(f'Force train enforced: {args.force_train}')
-            #print(f'Force train no enforced: {args.force_train}')
-            raise FileNotFoundError
+#     try:
+#         if not args.force_train:
+#             print(f'Force train enforced: {args.force_train}')
+#             #print(f'Force train no enforced: {args.force_train}')
+#             raise FileNotFoundError
 
-        file_name = f"{args.exp}_{args.params_id}.pth"
-        model = load_model_parameters(model, file_name, checkpoints_dir, checkpoints_saved_dir, device)
-    except FileNotFoundError:
-        print("Starting training")
-        optimizer = torch.optim.Adam(
-            model.parameters(),
-            lr=args.lr)
-        for epoch in range(args.num_epochs):
-            print("Epoch", epoch + 1)     
-            loss,input_mb, recon_mb, loss_dict = train(model=model,
-                    train_loader=train_dataloader,
-                    device=device,
-                    optimizer=optimizer,
-                    epoch=epoch)
-            print(f'epoch [{epoch+1}/{args.num_epochs}], train loss: {round(loss,6)}')
+#             file_name = f"{args.exp}_{args.params_id}.pth"
+#             model = load_model_parameters(model, file_name, checkpoints_dir, device)
+#     except FileNotFoundError:
+    print("Starting training")
+    optimizer = torch.optim.Adam(
+        model.parameters(),
+        lr=args.lr)
 
-            f_name = os.path.join(out_dir, f"{args.exp}_loss_values.txt")
-            print_loss_logs(f_name, out_dir, loss_dict, epoch, args.exp)   # 
+    scale = (args.max_beta - args.min_beta) / args.num_epochs
 
-                # save model parameters
-            if (epoch + 1) % 100 == 0 or epoch in [0, 4, 9, 24]:
-                    # to resume a training optimizer state dict and epoch
-                    # should also be saved
-                torch.save(model.state_dict(), os.path.join(
-                        checkpoints_dir, f"{args.exp}_{epoch + 1}.pth"
-                        )
+    for epoch in range(args.num_epochs):
+        if epoch == 0:
+            if args.anneal_beta:
+                print('Training will be progressing with kld annealing to beta: {args.max_beta}')
+            else:
+                print('Training will be progressing with fixed beta: {args.max_beta}')
+
+        print("Epoch", epoch + 1)
+
+        if args.anneal_beta:
+            if args.anneal2descend:
+                new_beta = max(args.min_beta, args.max_beta - scale*epoch)
+            else:
+                new_beta = min(args.max_beta, scale*epoch)
+        else:
+            new_beta = args.max_beta
+
+        loss,input_mb, recon_mb, loss_dict = train(model=model,
+                train_loader=train_dataloader,
+                device=device,
+                optimizer=optimizer,
+                beta=new_beta)
+        print(f'epoch [{epoch+1}/{args.num_epochs}], train loss: {round(loss,6)}')
+
+        f_name = os.path.join(out_dir, f"{args.exp}_loss_values.txt")
+        print_loss_logs(f_name, out_dir, loss_dict, epoch, args.exp)   # 
+
+            # save model parameters
+        if (epoch + 1) % 100 == 0 or epoch in [0, 4, 9, 24]:
+                # to resume a training optimizer state dict and epoch
+                # should also be saved
+            torch.save(model.state_dict(), os.path.join(
+                    checkpoints_dir, f"{args.exp}_{epoch + 1}.pth"
                     )
-
-                # print some reconstrutions
-            if (epoch + 1) % 50 == 0 or epoch in [0, 4, 9, 14, 19, 24, 29, 49]:   # check this part
-                img_train = utils.make_grid(
-                    #tensor_img_to_01(
-                        torch.cat((
-                            torch.flip(input_mb[:, :3, :, :], dims=(1,)),
-                            torch.flip(recon_mb[:, :3, :, :], dims=(1,)),
-                        ), dim=0)
-                    #)
-                    ,
-                    nrow=batch_size
                 )
-                utils.save_image(
-                        img_train,
-                        f"{res_dir}/{args.exp}_img_train_{epoch + 1}.png"
-                    )  # f"torch_results/{args.exp}_img_train_{epoch + 1}.png"
-                model.eval()
-                input_test_mb, recon_test_mb, gts = eval(model=model,
-                                                             test_loader=test_dataloader,
-                                                             device=device, with_mask=args.with_mask)
 
-                model.train()
-                img_test = utils.make_grid(
-                        torch.cat((
-                            torch.flip(input_test_mb[:, :3, :, :], dims=(1,)),
-                            torch.flip(recon_test_mb[:, :3, :, :], dims=(1,))),
-                            dim=0),
-                            nrow=batch_size_test
-                    )
-                utils.save_image(
-                        img_test,
-                        f"{res_dir}/{args.exp}_img_test_{epoch + 1}.png"  
-                    )  # f"torch_results/{args.exp}_img_test_{epoch + 1}.png"
+            # print some reconstrutions
+        if (epoch + 1) % 50 == 0 or epoch in [0, 4, 9, 14, 19, 24, 29, 49]:   # check this part
+            img_train = utils.make_grid(
+                #tensor_img_to_01(
+                    torch.cat((
+                        torch.flip(input_mb[:, :3, :, :], dims=(1,)),
+                        torch.flip(recon_mb[:, :3, :, :], dims=(1,)),
+                    ), dim=0)
+                #)
+                ,
+                nrow=batch_size
+            )
+            utils.save_image(
+                    img_train,
+                    f"{res_dir}/{args.exp}_img_train_{epoch + 1}.png"
+                )  # f"torch_results/{args.exp}_img_train_{epoch + 1}.png"
+            model.eval()
+            input_test_mb, recon_test_mb, gts = eval(model=model,
+                                                         test_loader=test_dataloader,
+                                                         device=device, with_mask=args.with_mask)
+
+            model.train()
+            img_test = utils.make_grid(
+                    torch.cat((
+                        torch.flip(input_test_mb[:, :3, :, :], dims=(1,)),
+                        torch.flip(recon_test_mb[:, :3, :, :], dims=(1,))),
+                        dim=0),
+                        nrow=batch_size_test
+                )
+            utils.save_image(
+                    img_test,
+                    f"{res_dir}/{args.exp}_img_test_{epoch + 1}.png"  
+                )  # f"torch_results/{args.exp}_img_test_{epoch + 1}.png"
 
 if __name__ == "__main__":
     args = parse_args()

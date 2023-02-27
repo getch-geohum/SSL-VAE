@@ -12,10 +12,10 @@ import os
 import matplotlib.pyplot as plt
 from skimage.io import imread
 import cv2
+import elasticdeform  # elastic deform 
 
-
-def make_normal(fil):
-    return (fil - np.amin(fil)) / (np.amax(fil) - np.amin(fil))
+def make_normal(img):
+    return np.clip(((img - np.amin(img))+0.00001) / ((np.amax(img) - np.amin(img))+0.00001), 0,1)
 
 def NDVI(image, channel='first', normalize=True, func=True):
         if normalize:
@@ -66,7 +66,7 @@ def grayIntensity(x, equalize=False, treshold=120, b_treshold=0, c_treshold=0, n
         return None
         
         
-def channelIntensity(self,x, channel_tresholds=[0.75, 0.65, 0.65], channel='last', approach='max', nb_channels=4):
+def channelIntensity(x, channel_tresholds=[0.75, 0.65, 0.65], channel='last', approach='max', nb_channels=3): # 0.75, 0.65, 0.65]
     if channel == 'last':
         nc = x.shape[-1]
         a, b, c = x[:,:,0], x[:,:,1], x[:,:,2]
@@ -75,7 +75,7 @@ def channelIntensity(self,x, channel_tresholds=[0.75, 0.65, 0.65], channel='last
         a, b, c = x[0,:,:], x[1,:,:], x[2, :,:]
 
     assert len(channel_tresholds) == nc, 'number of provided channel tresholds and number of channels is not the same'
-    aa = np.where(a>channel_tresholds[0],1,0)
+    aa = np.where(a>=channel_tresholds[0],1,0)
     bb = np.where(b>=channel_tresholds[1],1,0)
     cc = np.where(c>=channel_tresholds[2],1,0)
     dd = np.dstack((aa, bb, cc))
@@ -88,10 +88,10 @@ def channelIntensity(self,x, channel_tresholds=[0.75, 0.65, 0.65], channel='last
         mask = np.max(dd, axis=-1)
     elif approach == 'intersection':
         mask = aa*bb*cc
-    mask_clean = cv2.morphologyEx(mask.astype(np.uint8),cv2.MORPH_OPEN,np.ones((3,3), int), iterations = 1)
+    mask_clean = cv2.morphologyEx(cc.astype(np.uint8),cv2.MORPH_OPEN, np.ones((3,3),int), iterations = 1) #replace cc with mask
     big_mask = np.dstack([mask_clean]*nb_channels)
 
-    if np.sum(mask_clean)>=16:
+    if np.sum(mask_clean)>=12:
         mask_image = np.where(big_mask==1, x, big_mask)
         return (mask_image, big_mask)
     else:
@@ -298,7 +298,7 @@ class TestDataset(Dataset):
                                                nb_channels=self.nb_channels) # self.img_dir is the directory that contained 
         
         
-        assert len(self.image_array) == len(self.mask_array), f'image {len(self.image_array)} and label {len(self.mask_array)} numbers are not the same'
+            assert len(self.image_array) == len(self.mask_array), f'image {len(self.image_array)} and label {len(self.mask_array)} numbers are not the same'
         
         print(f'Obtained {len(self.image_array)} images and labels for testing')
         

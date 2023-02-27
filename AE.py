@@ -2,14 +2,14 @@ import numpy as np
 import random
 import torch
 from torch import nn
-from torchvision.models.resnet import resnet18, resnet50 # just resnet 50 is used as encoder backbone
+from torchvision.models.resnet import resnet18, resnet34, resnet50 # just resnet 50 is used as encoder backbone
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 
 
 class SSAE(nn.Module):
     
-    def __init__(self, img_size, nb_channels, latent_img_size, z_dim, lamda=0.5):
+    def __init__(self, img_size, nb_channels, latent_img_size, z_dim, lamda=0.9):
         '''
         '''
         super(SSAE, self).__init__()
@@ -24,7 +24,7 @@ class SSAE(nn.Module):
         self.max_depth_conv = 2 ** (4 + self.nb_conv)
         print(f'Maximum depth conv: {self.max_depth_conv}')
         
-        self.resnet = resnet50(pretrained=False) # resnet18(pretrained=False)
+        self.resnet = resnet34(pretrained=False) # resnet18(pretrained=False)
         self.resnet_entry = nn.Sequential(
             nn.Conv2d(self.nb_channels, 64, kernel_size=7,
                 stride=2, padding=3, bias=False),
@@ -54,7 +54,7 @@ class SSAE(nn.Module):
             *self.encoder_layers,
         )
         self.final_encoder = nn.Sequential(
-            nn.Conv2d(2048, self.z_dim, kernel_size=1,
+            nn.Conv2d(128, self.z_dim, kernel_size=1,
             stride=1, padding=0)
         ) # self.max_depth_conv  repace 2048
 

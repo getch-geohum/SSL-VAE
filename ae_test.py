@@ -58,7 +58,7 @@ def test(args):
     checkpoints_dir =f'{args.dst_dir}/torch_checkpoints'  
     
     args.batch_size_test = 1
-    auc_file = f"{args.dst_dir}/torch_logs/AUC_ssmsummary.txt"
+    auc_file = f"{args.dst_dir}/torch_logs/{args.params_id}_AUC_ssmsummary.txt"
     
     predictions_dir =f"{args.dst_dir}/predictions"   # need change
     if not os.path.exists(predictions_dir):
@@ -90,8 +90,10 @@ def test(args):
         gt_np = gt[0].cpu().numpy().astype(float)
         #print('Ground truth shape', gt_np.shape)
         #print('Ground truth dtype', gt_np.dtype)
-        
-        x_rec,_ = model(imgs)
+        if args.model == 'ssae':
+            x_rec = model(imgs)
+        else:
+            x_rec,_ = model(imgs)
 
         #print(f'Reconstruction shape: {x_rec.shape}')
         #print(f'shape of rec: {x_rec.shape}; shape of imgs: {imgs.shape}')
@@ -128,39 +130,41 @@ def test(args):
         m_aucs = np.mean(aucs)
         pbar.set_description(f"mean ROCAUC: {m_aucs:.3f}")
 
-        ori = imgs[0].permute(1, 2, 0).cpu().numpy()
+        if args.save_preds:
+
+            ori = imgs[0].permute(1, 2, 0).cpu().numpy()
         
-        ori = ori[..., :3] # NOTE 4 bands panoptics
+            ori = ori[..., :3] # NOTE 4 bands panoptics
         
-        rec = x_rec[0].detach().permute(1, 2, 0).cpu().numpy()
-        rec = rec[..., :3] # NOTE 4 bands panoptics
-        rec = np.dstack((rec[:,:,2], rec[:,:,1],rec[:,:,0]))  # to have clear RGB image
-        path_to_save = f'{args.dst_dir}/predictions/'  # needs reshafling
+            rec = x_rec[0].detach().permute(1, 2, 0).cpu().numpy()
+            rec = rec[..., :3] # NOTE 4 bands panoptics
+            rec = np.dstack((rec[:,:,2], rec[:,:,1],rec[:,:,0]))  # to have clear RGB image
+            path_to_save = f'{args.dst_dir}/predictions/'  # needs reshafling
 
-        img_to_save = Image.fromarray((ori * 255).astype(np.uint8))
-        img_to_save.save(path_to_save + '{}_ori.png'.format(str(ii))) 
-        img_to_save = Image.fromarray(gt_np[0,:,:].astype(np.uint8))    
-        img_to_save.save(path_to_save + '{}_gt.png'.format(str(ii))) 
-        img_to_save = Image.fromarray((rec * 255).astype(np.uint8))
-        img_to_save.save(path_to_save + '{}_rec.png'.format(str(ii)))    
-        #np.save(path_to_save + f'{ii}_final_amap.npy', amaps)  
+            img_to_save = Image.fromarray((ori * 255).astype(np.uint8))
+            img_to_save.save(path_to_save + '{}_ori.png'.format(str(ii))) 
+            img_to_save = Image.fromarray(gt_np[0,:,:].astype(np.uint8))    
+            img_to_save.save(path_to_save + '{}_gt.png'.format(str(ii))) 
+            img_to_save = Image.fromarray((rec * 255).astype(np.uint8))
+            img_to_save.save(path_to_save + '{}_rec.png'.format(str(ii)))    
+            #np.save(path_to_save + f'{ii}_final_amap.npy', amaps)  
 
-        cm = plt.get_cmap('jet')
-        amaps = cm(amaps)
-        img_to_save = Image.fromarray((amaps[..., :3] * 255).astype(np.uint8))
-        img_to_save.save(path_to_save + '{}_final_amap.png'.format(str(ii))) 
+            cm = plt.get_cmap('jet')
+            amaps = cm(amaps)
+            img_to_save = Image.fromarray((amaps[..., :3] * 255).astype(np.uint8))
+            img_to_save.save(path_to_save + '{}_final_amap.png'.format(str(ii))) 
         
-        mads = cm(mad)
-        img_to_save = Image.fromarray((mads[..., :3] * 255).astype(np.uint8))
-        img_to_save.save(path_to_save + '{}_final_mads.png'.format(str(ii))) 
+            mads = cm(mad)
+            img_to_save = Image.fromarray((mads[..., :3] * 255).astype(np.uint8))
+            img_to_save.save(path_to_save + '{}_final_mads.png'.format(str(ii))) 
 
-        mads_a = cm(mad_a)
-        img_to_save = Image.fromarray((mads_a[..., :3] * 255).astype(np.uint8))
-        img_to_save.save(path_to_save + '{}_final_mads_copy.png'.format(str(ii))) 
+            mads_a = cm(mad_a)
+            img_to_save = Image.fromarray((mads_a[..., :3] * 255).astype(np.uint8))
+            img_to_save.save(path_to_save + '{}_final_mads_copy.png'.format(str(ii))) 
 
-        combs = cm(amaps_comb)
-        img_to_save = Image.fromarray((combs[..., :3] * 255).astype(np.uint8))
-        img_to_save.save(path_to_save + '{}_final_combs.png'.format(str(ii))) 
+            combs = cm(amaps_comb)
+            img_to_save = Image.fromarray((combs[..., :3] * 255).astype(np.uint8))
+            img_to_save.save(path_to_save + '{}_final_combs.png'.format(str(ii))) 
 
     m_auc = np.mean(aucs)
     with open(auc_file, 'a+') as txt:

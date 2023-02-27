@@ -32,7 +32,7 @@ class SS_CVAE(nn.Module):
         self.entry_nb_channel = self.nb_channels + self.mask_nb_channel   # changed part
         self.code_nb_channel = self.z_dim + self.mask_nb_channel # number of channels when we concatenate q(z|x,y) with y
 
-        self.resnet = resnet34(pretrained=False) # resnet18(pretrained=False)
+        self.resnet = resnet34(weights=None) # resnet18(pretrained=False)
         self.resnet_entry = nn.Sequential(
             nn.Conv2d(self.nb_channels, 64, kernel_size=7,
                 stride=2, padding=3, bias=False),
@@ -147,13 +147,13 @@ class SS_CVAE(nn.Module):
 
 
     def kld(self): # kld loss without mask
-        return 0.5 * torch.sum(1 + self.logvar - self.mu.pow(2) - self.logvar.exp(),dim=(1))
+        return 0.5 * torch.sum(1 + self.logvar - self.mu.pow(2) - self.logvar.exp(),dim=(1,2,3))
 
 
     def tarctanh(self, x):
         return 0.5 * torch.log((1+x)/(1-x))
 
-    def compute_loss(self,X, Mm, Mn, prob, recon_x):
+    def compute_loss(self,X, Mm, Mn, prob, recon_x, beta):
         '''x: modified input image, in Bauers paper both modified and normal image for loss computation |Rec_x-X|
             recon_x: recontructed image
             Mm: mask signifying modified regions
@@ -162,21 +162,20 @@ class SS_CVAE(nn.Module):
             as all pixels have equali probability of being 1 or 0
         '''
 
-        base = 256 * 256
-        w_n = torch.sum(Mn[:, 0, :, :], dim=(1,2)) / base  # [batch_n,] weight
-        w_m = torch.sum(Mm[:, 0, :, :], dim=(1,2)) / base
-        lamda = 0.9
+        #base = 256 * 256
+        #w_n = torch.sum(Mn[:, 0, :, :], dim=(1,2)) / base  # [batch_n,] weight
+        #w_m = torch.sum(Mm[:, 0, :, :], dim=(1,2)) / base
 
         P  = torch.where(Mm==0, torch.log((1-prob)), torch.log(prob))
         rec = self.xent_continuous_ber(recon_x, X)
 
-        rec_raw = torch.sum(Mn*(P+rec),dim=(1)) + torch.sum(Mm*(P+rec),dim=(1))  # the norm is computed on channel dim
-        #rec_raw = lamda*torch.mean(torch.sum(Mn*(rec+P), dim=(1)), dim=(1,2))*w_n + (1-lamda)*torch.mean(torch.sum(Mm * (rec+P), dim=(1)),dim=(1,2))*w_m  # the reduction is computed on channel dim
+        rec_raw = torch.sum(Mn*(P+rec),dim=(1,2,3)) + torch.sum(Mm*(P+rec),dim=(1,2,3))  # the norm is computed on channel dim
+        #rec_raw = torch.mean(torch.sum(Mn*(rec+P), dim=(1)), dim=(1,2))*w_n + torch.mean(torch.sum(Mm * (rec+P), dim=(1)),dim=(1,2))*w_m  # the reduction is computed on channel dim
 
         rec_term = torch.mean(rec_raw)
         kld = torch.mean(self.kld())
 
-        L = sum([rec_term, 0.001*kld])
+        L = sum([rec_term, beta*kld])
 
         # kk = rec_term.item() + kld.item()
 
@@ -196,11 +195,11 @@ class SS_CVAE(nn.Module):
         return loss, loss_dict
     
 
-    def step(self, inputs): # inputs contain, modified image, normal image and mask
+    def step(self, inputs, beta): # inputs contain, modified image, normal image and mask
         X, Xm, Mm, Mn, prob = inputs
         rec, _ = self.forward(Xm)
 
-        loss, loss_dict = self.compute_loss(X=Xm, Mm=Mm, Mn=Mn, prob=prob, recon_x=rec)
+        loss, loss_dict = self.compute_loss(X=X, Mm=Mm, Mn=Mn, prob=prob, recon_x=rec, beta=beta)  # 
 
         rec = self.mean_from_lambda(rec)
 
