@@ -90,7 +90,7 @@ def test(args):
         gt_np = gt[0].cpu().numpy().astype(float)
         #print('Ground truth shape', gt_np.shape)
         #print('Ground truth dtype', gt_np.dtype)
-        if args.model == 'ssae':
+        if args.model in ['ssae', 'mv_ae']:
             x_rec = model(imgs)
         else:
             x_rec,_ = model(imgs)
