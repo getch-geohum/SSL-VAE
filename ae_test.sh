@@ -1,8 +1,8 @@
 #!/bin/bash
 
 python ae_test.py\
-	--exp=ss_cvae\
-    	--model=ss_cvae\
+	--exp=mv_ae\
+    	--model=mv_ae\
     	--num_epochs=100\
     	--lr=1e-4\
     	--img_size=256\
@@ -13,9 +13,9 @@ python ae_test.py\
     	--lamda=0.9\
     	--nb_channels=4\
     	--params_id=100\
-    	--dst_dir=D:/DATA/Optim_incr/Minawao_june_2016\
-    	--data_dir=D:/DATA/rawdata/Minawao_june_2016\
-    	--dataset=camp\
+    	--dst_dir=D:/DATA/mvtec/carpet\
+    	--data_dir=D:/DATA/rawdata/mvtec\
+    	--dataset=mvtec\
 	--texture=carpet\
 	--with_mask\
     	--with_prob\
