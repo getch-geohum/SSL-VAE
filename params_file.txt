@@ -1,0 +1,9 @@
+{"Minawao_june_2016":{"ndvi_treshold": 0.1, "intensity_treshold": 0, "brightness_treshold": 0, "contrast_treshold": 0, "func": "NDVI", "equalize": false}, 
+"Minawao_feb_2017": {"ndvi_treshold": 0.3, "intensity_treshold": 0, "brightness_treshold": 0, "contrast_treshold": 0, "func": "NDVI", "equalize": false}, 
+"Deghale_Apr_2017": {"ndvi_treshold": 0.1, "intensity_treshold": 0, "brightness_treshold": 0, "contrast_treshold": 0, "func": "NDVI", "equalize": false}, 
+"Zamzam_april_2022": {"ndvi_treshold": 0.1, "intensity_treshold": 0, "brightness_treshold": 0, "contrast_treshold": 0, "func": "NDVI", "equalize": false}, 
+"Nguyen_march_2017": {"ndvi_treshold": 0.0, "intensity_treshold": 120, "brightness_treshold": 6.5, "contrast_treshold": 0, "func": "grayIntensity", "equalize": false}, 
+"Tza_oct_2016": {"ndvi_treshold": 0.1, "intensity_treshold": 120, "brightness_treshold": 7, "contrast_treshold": 0, "func": "grayIntensity", "equalize": false}, 
+"Kutuplong_dec_2017": {"ndvi_treshold": 0, "intensity_treshold": 150, "brightness_treshold": 0, "contrast_treshold": 0, "func": "channelIntensity", "equalize": false}, 
+"Kule_tirkidi_jun_2018": {"ndvi_treshold": 0, "intensity_treshold": 140, "brightness_treshold": 0, "contrast_treshold": 0, "func": "grayIntensity", "equalize": true}, 
+"Kule_tirkidi_marc_2017": {"ndvi_treshold": 0.1, "intensity_treshold": 145, "brightness_treshold": 0, "contrast_treshold": 0, "func": "grayIntensity", "equalize": true}}
