@@ -11,6 +11,7 @@ from ssvae import SSVAE
 from c_ssvae import SS_CVAE
 from mvtec_models import SS_AEmvtec, SS_CVAEmvtec
 import time
+import math
 import json
 import argparse
 import matplotlib
@@ -80,6 +81,7 @@ def computeLinearBeta(num_epochs=100, steps_per_epoch=20, cycle=4, ratio=0.5, pl
     ratio: The ratio of increase steps from total steps within a single annealing cycle
     plot: Boolean value whether to plot the computed beta values
     '''
+    tot = num_epochs*steps_per_epoch
     period = int(num_epochs/cycle)
     period_num_steps = period*steps_per_epoch
     increase_steps = period_num_steps*ratio
@@ -93,6 +95,8 @@ def computeLinearBeta(num_epochs=100, steps_per_epoch=20, cycle=4, ratio=0.5, pl
     if plot:
         plt.plot(data)
         plt.show()
+    if len(data)>tot:
+        data = data[:tot]
     return data
 
 def load_ssae(args):
