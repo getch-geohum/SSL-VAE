@@ -142,7 +142,7 @@ class SS_AEmvtec(nn.Module):
         buttom = mod_dif_abs*rec_dif
 
         a = (self.lamda/torch.norm(Mn,1))*torch.norm(top,2)
-        b = ((1-self.lamda)/torch.norm(buttom_,1))*torch.norm(Mm*buttom,2)
+        b = ((1-self.lamda)/torch.norm(buttom_,1))*torch.norm(buttom,2)  # Mm*buttom = buttom
         loss = a-b
 
         print(f'{a.item()}--> {b.item()}--> {loss.item()}')

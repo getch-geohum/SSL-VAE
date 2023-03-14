@@ -14,6 +14,52 @@ from torch.utils.data import Dataset
 from torchvision import transforms
 import copy
 import matplotlib.pyplot as plt
+import cv2
+
+
+def drawLine(img1, img2, pt1, pt2, color, thickness):
+    x1, y1, x2, y2 = *pt1, *pt2
+    theta = np.pi - np.arctan2(y1 - y2, x1 - x2)
+    dx = int(np.sin(theta) * thickness / 2)
+    dy = int(np.cos(theta) * thickness / 2)
+    pts = [[x1 + dx, y1 + dy],
+           [x1 - dx, y1 - dy],
+            [x2 - dx, y2 - dy],
+            [x2 + dx, y2 + dy]]
+    cv2.fillPoly(img1, [np.array(pts)], color)
+    cv2.fillPoly(img2, [np.array(pts)], color)
+
+
+def addLineNoise(img, color=(255, 255, 255), thickness=10, n_lines=2, alpha=0.3):
+    open_img = np.full((512, 512, 3), 0, np.uint8)
+    rst_img = img.copy()
+    for i in range(n_lines):
+        pt1 = np.random.randint(0, 512, 2)
+        pt2 = np.random.randint(0, 512, 2)
+        drawLine(img1=rst_img,img2=open_img, pt1=pt1, pt2=pt2, color=color, thickness=thickness)
+    mask = np.where(open_img==255, 255, 255)
+    if alpha is not None:
+        image_new = cv2.addWeighted(img, alpha, rst_img, 1 - alpha, 0)
+        return image_new, mask
+    else:
+        return rst_img, mask
+
+
+def drawCeircle(image, color, alpha=0.1, xc=50, yc=50, r=70):
+    overlay = image.copy()
+    im2 = cv2.circle(overlay, (xc, yc), r, (0, 0, 0), -1)
+    mask = cv2.circle(np.zeros(overlay.shape), (xc, yc,), r, (1, 1, 1), -1)
+    image_new = cv2.addWeighted(image, alpha, im2, 1 - alpha, 0)
+    return (image_new, mask)
+
+
+def addCeircleNoise(image, color=(0, 0, 0)):
+    r = np.random.randint(30, 70) # radius of a ceircle
+    xc = np.random.randint(r+1, image.shape[0]-r-1)
+    yc = np.random.randint(r+1, image.shape[1]-r-1)
+    alpha = np.random.choice([0.3, 0.4, 0.5, 0.6])
+    im, mask = drawCeircle(image, color=color, alpha=alpha, xc=xc, yc=yc, r=r)
+    return im, mask
 
 
 # some functions are taken from https://itecnote.com/tecnote/python-create-random-shape-contour-using-matplotlib/
@@ -167,25 +213,35 @@ class MvtechTrainDataset(Dataset):
             return self.transform(nrm), self.transform(mdf), self.transform(mskm), self.transform(mskn)
 
 class MvtechTestDataset(Dataset):
-    def __init__(self, root, texture='carpet', fake_dataset_size=None):
+    def __init__(self, root, texture='carpet', fake_dataset_size=None,validate=False):
         self.root = root
+        self.validate = validate
         self.test_path = root + '/{}/test'
         self.img_dir = []
         if texture == 'all':
             for fold in ['carpet', 'grid', 'leather', 'tile', 'wood']:
                 test_path = self.test_path.format(fold)
+                if self.validate:
+                    sub_files = sorted(glob(f'{test_path}/good/*.png'))
+                    self.img_dir += sub_files
+                else:
+                    for s_fold in os.listdir(test_path):
+                        if s_fold != 'good':
+                            sub_files = sorted(glob(f'{test_path}/{s_fold}/*.png'))
+                            self.img_dir += sub_files
+        else:
+            test_path = self.test_path.format(texture)
+            print(test_path)
+            if self.validate:
+                sub_files = sorted(glob(f'{test_path}/good/*.png'))
+                self.img_dir += sub_files
+            else:
                 for s_fold in os.listdir(test_path):
                     if s_fold != 'good':
                         sub_files = sorted(glob(f'{test_path}/{s_fold}/*.png'))
                         self.img_dir += sub_files
-        else:
-            test_path = self.test_path.format(texture)
-            print(test_path)
-            for s_fold in os.listdir(test_path):
-                if s_fold != 'good':
-                    sub_files = sorted(glob(f'{test_path}/{s_fold}/*.png'))
-                    self.img_dir += sub_files
-                
+        
+
         self.lbl_dir =  [img.replace('test', 'ground_truth').replace('.png', '_mask.png') for img in self.img_dir]
         
         if fake_dataset_size is not None:
@@ -216,7 +272,10 @@ class MvtechTestDataset(Dataset):
 
     def __getitem__(self, index):
         img = self.image2Array(self.img_dir[index], normalize=True)
-        msk = self.image2Array(self.lbl_dir[index], normalize=False)
+        if self.validate:
+            msk = np.ones(img.shape[:2], float)
+        else:
+            msk = self.image2Array(self.lbl_dir[index], normalize=False)
         return self.transform(img), self.transform(msk)
     
     
