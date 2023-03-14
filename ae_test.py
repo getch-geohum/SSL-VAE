@@ -55,12 +55,16 @@ def test(args):
         torch.cuda.manual_seed(seed)
     np.random.seed(seed)
 
-    checkpoints_dir =f'{args.dst_dir}/torch_checkpoints'  
-    
+    checkpoints_dir = f'{args.dst_dir}/torch_checkpoints'  
+    feature_dir = f'{args.dst_dir}/torch_features' # to save latent space features
+    if not os.path.exists(feature_dir):
+        os.makedirs(feature_dir, exist_ok=True)
     args.batch_size_test = 1
-    auc_file = f"{args.dst_dir}/torch_logs/{args.params_id}_AUC_ssmsummary.txt"
-    
-    predictions_dir =f"{args.dst_dir}/predictions"   # need change
+    auc_file = f"{args.dst_dir}/torch_logs/{args.params_id}_localize_metric_ssmsummary.txt"
+    if args.validate:  # mainly to save mvtec normal images without ground truth data
+        predictions_dir =f"{args.dst_dir}/predictions_good/"
+    else:
+        predictions_dir =f"{args.dst_dir}/predictions/"   # need change
     if not os.path.exists(predictions_dir):
         os.makedirs(predictions_dir, exist_ok=True)
 
@@ -82,7 +86,10 @@ def test(args):
 
     model.eval()
 
-    aucs = []
+    aucs_ssim = []
+    aucs_mads = []
+    aucs_madsc = []
+    aucs_comb = []
 
     pbar = tqdm(test_dataloader)
     for ii,(imgs, gt) in enumerate(pbar): # changed
@@ -90,10 +97,12 @@ def test(args):
         gt_np = gt[0].cpu().numpy().astype(float)
         #print('Ground truth shape', gt_np.shape)
         #print('Ground truth dtype', gt_np.dtype)
-        if args.model in ['ssae', 'mv_ae']:
+        if args.model in ['ssae','mv_ae']:
             x_rec = model(imgs)
         else:
             x_rec,_ = model(imgs)
+            deep_embed = _[0][0].detach().cpu().numpy()
+            np.save(feature_dir + f'/{ii}_deep_feat.npy', deep_embed)
 
         #print(f'Reconstruction shape: {x_rec.shape}')
         #print(f'shape of rec: {x_rec.shape}; shape of imgs: {imgs.shape}')
@@ -117,21 +126,40 @@ def test(args):
         print(f'== Shape of amaps: {amaps.shape}==')
 
         
-        preds = mad_a # amaps.copy() 
+        preds_a = amaps.copy()
+        preds_b = mad_a.copy() #
+        preds_c = mad.copy()
+        preds_d = amaps_comb.copy()
         mask = np.zeros(gt_np.shape)
 
         try:
-            auc = roc_auc_score(gt_np.astype(np.uint8).flatten(), preds.flatten()) # AUC score per image chip
-            aucs.append(auc)
+            auc_a = roc_auc_score(gt_np.astype(np.uint8).flatten(), preds_a.flatten()) # AUC score per image chip
+            auc_b = roc_auc_score(gt_np.astype(np.uint8).flatten(), preds_b.flatten())
+            auc_c = roc_auc_score(gt_np.astype(np.uint8).flatten(), preds_c.flatten())
+            auc_d = roc_auc_score(gt_np.astype(np.uint8).flatten(), preds_d.flatten())
+            
+            #aucs.append(auc)
+
+            aucs_ssim.append(auc_a)
+            aucs_mads.append(auc_c)
+            aucs_madsc.append(auc_b)
+            aucs_comb.append(auc_d)
+
         except ValueError:
             pass
                 # ROCAUC will not be defined when one class only in y_true
 
-        m_aucs = np.mean(aucs)
-        pbar.set_description(f"mean ROCAUC: {m_aucs:.3f}")
+        #m_aucs = np.mean(aucs)   aucs_mads
+
+        m_aucs_ssim_s = np.mean(aucs_ssim)   # m_aucs_ssim
+        m_aucs_mads_s = np.mean(aucs_mads)
+        m_aucs_madsc_s = np.mean(aucs_madsc)
+        m_aucs_comb_s = np.mean(aucs_comb)
+
+
+        pbar.set_description(f"mean ROCAUC: {m_aucs_ssim_s:.3f}")
 
         if args.save_preds:
-
             ori = imgs[0].permute(1, 2, 0).cpu().numpy()
         
             ori = ori[..., :3] # NOTE 4 bands panoptics
@@ -139,7 +167,7 @@ def test(args):
             rec = x_rec[0].detach().permute(1, 2, 0).cpu().numpy()
             rec = rec[..., :3] # NOTE 4 bands panoptics
             rec = np.dstack((rec[:,:,2], rec[:,:,1],rec[:,:,0]))  # to have clear RGB image
-            path_to_save = f'{args.dst_dir}/predictions/'  # needs reshafling
+            path_to_save = predictions_dir # f'{args.dst_dir}/predictions/'  # needs reshafling
 
             img_to_save = Image.fromarray((ori * 255).astype(np.uint8))
             img_to_save.save(path_to_save + '{}_ori.png'.format(str(ii))) 
@@ -166,11 +194,29 @@ def test(args):
             img_to_save = Image.fromarray((combs[..., :3] * 255).astype(np.uint8))
             img_to_save.save(path_to_save + '{}_final_combs.png'.format(str(ii))) 
 
-    m_auc = np.mean(aucs)
-    with open(auc_file, 'a+') as txt:
-        txt.write(f'Dataset level mean AUC: {m_auc}\n')
-    print("Mean auc on for dataset: ", m_auc)
+    #m_auc = np.mean(aucs)
 
+
+    m_aucs_ssim = np.mean(aucs_ssim)  # m_aucs_ssim
+    m_aucs_mads = np.mean(aucs_mads)
+    m_aucs_madsc = np.mean(aucs_madsc)
+    m_aucs_comb = np.mean(aucs_comb)
+
+    if not args.validate:
+        with open(auc_file, 'a+') as txt:
+            txt.write('+===================================+\n')
+            txt.write(f'SSIM mean AUC: {m_aucs_ssim}\n')
+            txt.write(f'MAD mean AUC: {m_aucs_mads}\n')
+            txt.write(f'MAD_baur mean AUC: {m_aucs_madsc}\n')
+            txt.write(f'SSIM_MAD mean AUC: {m_aucs_comb}\n')
+            txt.write('+===================================+\n')
+
+            print("Mean auc on for dataset based on SSIM: ", m_aucs_ssim)
+            print("Mean auc on for dataset based on MAD: ", m_aucs_mads)
+            print("Mean auc on for dataset based on MAD_c: ", m_aucs_madsc)
+            print("Mean auc on for dataset based on MAD_SSIM: ", m_aucs_comb)
+    else:
+        pass
 
 if __name__ == "__main__":
     args = parse_args()

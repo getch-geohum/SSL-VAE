@@ -13,7 +13,7 @@ import copy
 
 class SS_CVAE(nn.Module):
     
-    def __init__(self, img_size, nb_channels, latent_img_size, z_dim, beta=0.1, mask_nb_channel=4):
+    def __init__(self, img_size, nb_channels, latent_img_size, z_dim, mask_nb_channel=4):
         '''
         '''
         super(SS_CVAE, self).__init__()
@@ -23,13 +23,12 @@ class SS_CVAE(nn.Module):
         self.nb_channels = nb_channels          # because the mask(y) will be be ingested to network
         self.latent_img_size = latent_img_size
         self.z_dim = z_dim
-        self.beta = beta
 
         self.nb_conv = int(np.log2(img_size // latent_img_size))
         self.max_depth_conv = 2 ** (4 + self.nb_conv)
         print(f'Maximum depth conv: {self.max_depth_conv}')
         
-        self.entry_nb_channel = self.nb_channels + self.mask_nb_channel   # changed part
+        self.exit_nb_channel = self.nb_channels-1 # self.mask_nb_channel   # changed part
         self.code_nb_channel = self.z_dim + self.mask_nb_channel # number of channels when we concatenate q(z|x,y) with y
 
         self.resnet = resnet34(weights=None) # resnet18(pretrained=False)
@@ -64,7 +63,7 @@ class SS_CVAE(nn.Module):
         self.final_encoder = nn.Sequential(
             nn.Conv2d(128, self.z_dim * 2, kernel_size=1,
             stride=1, padding=0)
-        ) # self.max_depth_conv  repace 2048   128
+        ) # self.max_depth_conv  repace 2048 128 256
 
         self.initial_decoder = nn.Sequential(
             nn.ConvTranspose2d(self.z_dim, self.max_depth_conv,
@@ -80,7 +79,7 @@ class SS_CVAE(nn.Module):
             depth_in = 2 ** (4 + i + 1)
             depth_out = 2 ** (4 + i)
             if i == 0:
-                depth_out = self.nb_channels  # self.entry_nb_channel
+                depth_out = self.exit_nb_channel  # self.entry_nb_channel
                 self.decoder_layers.append(nn.Sequential(
                     nn.ConvTranspose2d(depth_in, depth_out, 4, 2, 1),
                 ))
@@ -175,21 +174,18 @@ class SS_CVAE(nn.Module):
         rec_term = torch.mean(rec_raw)
         kld = torch.mean(self.kld())
 
-        L = sum([rec_term, beta*kld])
+        L = rec_term + beta*kld
 
-        # kk = rec_term.item() + kld.item()
 
 
         loss = L
 
-        # print(f"KLD: {kld}")
-        # print(f"recterm: {rec_term}")
-        # print(f"Total: {L}")
 
         loss_dict = {
             'loss': loss,
             'rec_term': rec_term,
-            'beta*kld': kld
+            'kld': kld,
+            'beta*kld':beta*kld
         } # the key is left not to modif entire workflow
 
         return loss, loss_dict
@@ -197,9 +193,17 @@ class SS_CVAE(nn.Module):
 
     def step(self, inputs, beta): # inputs contain, modified image, normal image and mask
         X, Xm, Mm, Mn, prob = inputs
-        rec, _ = self.forward(Xm)
 
-        loss, loss_dict = self.compute_loss(X=X, Mm=Mm, Mn=Mn, prob=prob, recon_x=rec, beta=beta)  # 
+        #print(f'shape of X: {X.shape}')
+        #print(f'shape of Xm: {Xm.shape}')
+        #print(f'shape of Mm: {Mm.shape}')
+        #print(f'shape of Mn: {Mn.shape}')
+        #print(f'shape of prob: {prob.shape}')
+
+        rec, _ = self.forward(Xm)
+        #print(f'shape of rec: {rec.shape}')
+
+        loss, loss_dict = self.compute_loss(X=Xm[:,:self.nb_channels-1,:,:], Mm=Mm[:,:self.nb_channels-1,:,:], Mn=Mn[:,:self.nb_channels-1,:,:], prob=prob[:,:self.nb_channels-1,:,:], recon_x=rec, beta=beta)  # 
 
         rec = self.mean_from_lambda(rec)
 

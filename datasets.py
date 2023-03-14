@@ -11,11 +11,40 @@ from glob import glob
 import os
 import matplotlib.pyplot as plt
 from skimage.io import imread
+from skimage.color import rgb2hsv
 import cv2
 import elasticdeform  # elastic deform 
 
-def make_normal(img):
-    return np.clip(((img - np.amin(img))+0.00001) / ((np.amax(img) - np.amin(img))+0.00001), 0,1)
+def makeConditionVar(img,out = 'hue'):
+    data = img[:,:,:3]
+    var = rgb2hsv(data)
+    if out == 'hue':
+        return var[:,:,0]
+    elif out == 'saturation':
+        return var[:,:,1]
+    elif out == 'value':
+        return var[:,:,2]
+    elif out == 'max':
+        return np.max(var, axis=-1)
+    elif out == 'min':
+        return np.min(var, axis=-1)
+    elif out == 'mean':
+        return np.mean(var, axis=-1)
+
+
+def make_normal(img, with_cvar=True):
+    if img.shape[-1] == 3:
+        #print(f'Before shape: {img.shape}')
+        img = np.dstack((img, np.mean(img, axis=-1).astype(img.dtype)))
+        #print(f'After shape: {img.shape}')
+    assert img.shape[-1] == 4, 'image normalization problem'
+    data = np.clip(((img - np.amin(img))+0.00001) / ((np.amax(img) - np.amin(img))+0.00001), 0,1)
+    if not with_cvar:
+        return data
+    else:
+        cvar = makeConditionVar(data) # conditioning variable which we assume d/t in every dataset
+        data = np.dstack((data,cvar))
+        return data
 
 def NDVI(image, channel='first', normalize=True, func=True):
         if normalize:
@@ -35,8 +64,8 @@ def NDVI(image, channel='first', normalize=True, func=True):
         return ndvi
 
 def grayIntensity(x, equalize=False, treshold=120, b_treshold=0, c_treshold=0, nb_channels=4):# 120
-    print(f'b_treshold: {b_treshold}')
-    print(f'c_treshold: {c_treshold}')
+    # print(f'b_treshold: {b_treshold}')
+    # print(f'c_treshold: {c_treshold}')
 
     rgb = np.dstack((x[:,:,2], x[:,:,1], x[:,:, 0]))
     gray = cv2.cvtColor((rgb*255).astype(np.uint8),cv2.COLOR_BGR2GRAY)
@@ -49,14 +78,14 @@ def grayIntensity(x, equalize=False, treshold=120, b_treshold=0, c_treshold=0, n
     brightness = round(np.sqrt(gray.mean()),2)
 
     if (b_treshold > 0) and (brightness < b_treshold):
-        print(f'got b_treshold: {b_treshold}')
+        # print(f'got b_treshold: {b_treshold}')
         reta, mask = cv2.threshold(gray,0,1,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
     elif (c_treshold > 0) and (contrast < c_treshold):
-        print(f'got c_treshold: {c_treshold}')
+        # print(f'got c_treshold: {c_treshold}')
         reta, mask = cv2.threshold(gray,0,1,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
     else:
         mask = np.where(gray<=treshold,0,1).astype(np.uint8)
-        print('Mask will be generated without acounting low ontrast objects')
+        # print('Mask will be generated without acounting low ontrast objects')
     mask_clean = cv2.morphologyEx(mask,cv2.MORPH_OPEN,np.ones((3,3), int), iterations = 1) # cler ver smaller detached objects
     big_mask = np.dstack([mask_clean]*nb_channels) # multi-channel mask based on number of channels specifid
     if np.sum(mask_clean)>=16:
@@ -66,19 +95,22 @@ def grayIntensity(x, equalize=False, treshold=120, b_treshold=0, c_treshold=0, n
         return None
         
         
-def channelIntensity(x, channel_tresholds=[0.75, 0.65, 0.65], channel='last', approach='max', nb_channels=3): # 0.75, 0.65, 0.65]
+def channelIntensity(x, channel_tresholds=[0.75, 0.65, 0.65, 0.65], channel='last', approach='max', nb_channels=4): # 0.75, 0.65, 0.65]
     if channel == 'last':
         nc = x.shape[-1]
-        a, b, c = x[:,:,0], x[:,:,1], x[:,:,2]
+        #print(f'shape of image: {nc}')
+        a, b, c, d = x[:,:,0], x[:,:,1], x[:,:,2], x[:,:,3]
     else:
         nc = x.shape[0]
-        a, b, c = x[0,:,:], x[1,:,:], x[2, :,:]
+        #print(f'shape of image: {nc}')
+        a, b, c, d = x[0,:,:], x[1,:,:], x[2, :,:], x[3, :,:]
 
-    assert len(channel_tresholds) == nc, 'number of provided channel tresholds and number of channels is not the same'
+    # assert len(channel_tresholds) == nc, 'number of provided channel tresholds and number of channels is not the same'
     aa = np.where(a>=channel_tresholds[0],1,0)
     bb = np.where(b>=channel_tresholds[1],1,0)
     cc = np.where(c>=channel_tresholds[2],1,0)
-    dd = np.dstack((aa, bb, cc))
+    oc = np.where(d>=channel_tresholds[3],1,0)
+    dd = np.dstack((aa, bb, cc, oc))
 
     if approach == 'mode':
         m_tensor = torch.from_numpy(dd)
@@ -100,6 +132,7 @@ def channelIntensity(x, channel_tresholds=[0.75, 0.65, 0.65], channel='last', ap
         
         
 def ndviMasker(x, treshold=0.2, nb_channels=None):
+    #print(f'before ndvi shape: {x.shape}')
     ndvi = NDVI(image=x, channel='last', normalize=False, func=True)
     mask = np.where(ndvi<=treshold,1,0).astype(np.uint8)
     mask_clean = cv2.morphologyEx(mask,cv2.MORPH_OPEN,np.ones((3,3), int), iterations = 1) 
@@ -149,12 +182,14 @@ class TrainDataset(Dataset):
         
         self.img_dir = sorted(glob(f'{self.train_path}/images/*.tif'))
         self.lbl_dir = sorted(glob(f'{self.test_path}/images/*.tif'))
+        print('============================================')
         print("Number of train images", len(self.img_dir), 
                 "Number of test images", len(self.lbl_dir),
                 "Fake dataset size", self.fake_dataset_size,
                 "brightness treshold", self.b_treshold,
                 "contrast treshold", self.c_treshold,
                 "Tresholding function", self.func)
+        print('============================================')
 
         if ((self.fake_dataset_size is not None)
             and (self.fake_dataset_size < len(self.img_dir))):
@@ -229,7 +264,6 @@ class TrainDataset(Dataset):
             if func == 'grayIntensity':
                 masks = [grayIntensity(img, equalize=equalize, treshold=intensity_treshold, c_treshold=c_treshold, b_treshold=b_treshold, nb_channels=nb_channels) for img in arrays]
             else:
-                print("========================================")
                 masks = [channelIntensity(img, nb_channels=nb_channels) for img in arrays]    
         masks = [mask for mask in masks if mask is not None]
         return masks
@@ -316,7 +350,7 @@ class TestDataset(Dataset):
             return [make_normal(imread(image).astype(float)) for image in images]
         
     def computeMask(self, files, func='NDVI', ndvi_treshold=None, intensity_treshold=None, equalize=None, c_treshold=None, b_treshold=None, nb_channels=None):
-        arrays = self.image2Array(files)
+        arrays = self.image2Array(files, normalize=True)
         if func == 'NDVI': 
             masks = [ndviMasker(img, treshold=ndvi_treshold, nb_channels=nb_channels) for img in arrays] 
         else: 

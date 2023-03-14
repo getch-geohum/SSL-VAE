@@ -11,46 +11,54 @@ from torch import nn
 import matplotlib
 matplotlib.use('Agg')
 import sys
+import random 
 from utils import * 
 
 
-def train(model, train_loader, device, optimizer, beta):
-
+def train(model, train_loader, device, optimizer, betas, c_epoch, txtt):
+    random.shuffle(train_loader)
     model.train()
     train_loss = 0
     loss_dict = {}
     controler = 0
+    step_per_epoch = sum([len(dloader) for dloader in train_loader])
 
     print("Looks grate, go ahead!........................")
-    for batch_idx, (a, b, c, d, e) in enumerate(train_loader): # xm/x, Mm, Mn, prob
-        # print(f"Shape of a is: {a.shape}")
-        print(batch_idx + 1, end=", ", flush=True)
-        a = a.to(device) 
-        b = b.to(device)
-        c = c.to(device)
-        d = d.to(device)
-        e = e.to(device)
+    print(f'Got {len(train_loader)} dataaloaders for training')
+    for _train_loader in train_loader:
+        for batch_idx, (a, b, c, d, e) in enumerate(_train_loader): # xm/x, Mm, Mn, prob
+            # print(f"Shape of a is: {a.shape}")
+            print(batch_idx + 1, end=", ", flush=True)
+            a = a.to(device) 
+            b = b.to(device)
+            c = c.to(device)
+            d = d.to(device)
+            e = e.to(device)
 
-        optimizer.zero_grad(set_to_none=True)   # otherwise grads accumulate in backward
+            optimizer.zero_grad(set_to_none=True)   # otherwise grads accumulate in backward
 
-        #loss, rec_im, loss_dict_new = model.step(
-        #    (a, b, c, d, e), beta=beta)
+            #loss, rec_im, loss_dict_new = model.step(
+            #    (a, b, c, d, e), beta=beta)
 
-        if type(model) is SSAE or type(model) is SS_AEmvtec:
-            loss, rec_im, loss_dict_new = model.step(
-            (a, b, c, d))
+            if type(model) is SSAE or type(model) is SS_AEmvtec:
+                loss, rec_im, loss_dict_new = model.step(
+                (a, b, c, d))
 
-            loss.backward()
-        elif type(model) is SSVAE or type(model) is SS_CVAE or type(model) is SS_CVAEmvtec:
-            loss, rec_im, loss_dict_new = model.step(
-            (a, b, c, d, e), beta=beta)
+                loss.backward()
+            elif type(model) is SSVAE or type(model) is SS_CVAE or type(model) is SS_CVAEmvtec:
+                step_beta = betas[(c_epoch-1)*step_per_epoch + controler] # betas[c_epoch*len(train_loader)+batch_idx]  # betas[(c_epoch-1)*step_per_epoch + controler] 
+                loss, rec_im, loss_dict_new = model.step(
+                (a, b, c, d, e), beta=step_beta)
 
-            (-loss).backward()
-        train_loss += loss.item()
-        print(f"Step loss: {loss.item()}")
-        loss_dict = update_loss_dict(loss_dict, loss_dict_new)   # update_loss_dict need fixation
-        optimizer.step()
-        controler+=1
+                (-loss).backward()
+            train_loss += loss.item()
+
+            txtt.write(f"{step_beta},{loss_dict_new['kld']},{loss_dict_new['beta*kld'].item()},{loss_dict_new['rec_term'].item()},{loss_dict_new['loss'].item()}\n")
+            print(f"Ep: {c_epoch} --> |beta: {step_beta} |kld: {loss_dict_new['kld'].item()} |b*kld: {loss_dict_new['beta*kld'].item()} |rec: {loss_dict_new['rec_term'].item()} |total: {loss_dict_new['loss'].item()}|")
+
+            loss_dict = update_loss_dict(loss_dict, loss_dict_new)   # update_loss_dict need fixation
+            optimizer.step()
+            controler+=1
     
     train_loss /= controler
     loss_dict = {k:v / controler for k, v in loss_dict.items()}
@@ -67,7 +75,7 @@ def eval(model, test_loader, device, with_mask=False):
         input_mb, gt_mb = next(iter(test_loader)) # .next()
         # gt_mb = gt_mb.to(device)
         input_mb = input_mb.to(device)
-    if type(model) is SSAE or SS_AEmvtec:
+    if type(model) is SSAE or type(model) is SS_AEmvtec:
         recon_mb = model(input_mb)
     elif type(model) is SS_CVAE or type(model) is SSVAE or type(model) is SS_CVAEmvtec:
         if with_mask:
@@ -134,31 +142,49 @@ def main(args):
     optimizer = torch.optim.Adam(
         model.parameters(),
         lr=args.lr)
+    step_metric = open(f'{args.dst_dir}/torch_logs/step_metrics.txt', 'a+')
+    #step_metric.write("|||============================|||\n")
+    step_metric.write("beta,kld, beta_kld,rec_term,total\n")
+    
+    ###############################################################################
+    if args.data == 'all':
+        nsteps = sum([len(loader) for loader in train_dataloader])  # steps per per epoch
+    else:
+        nsteps = len(train_dataloader)
+    ###############################################################################
+    scale = (args.max_beta - args.min_beta) / (args.num_epochs*nsteps)
 
-    scale = (args.max_beta - args.min_beta) / args.num_epochs
+    if args.anneal_beta:
+        if args.anneal_cyclic:
+            betas = computeLinearBeta(num_epochs=args.num_epochs, steps_per_epoch=nsteps, cycle=args.cycle, ratio=args.ratio)
+            assert len(betas) == nsteps*args.num_epochs, 'number of betas {len(betas)} and total training steps {nsteps*args.num_epochs} were not the same'
+        else:
+            betas = [np.round(i*scale, 4) for i in range(args.num_epochs*nsteps)]
+    else:
+        betas = [args.max_beta]*nsteps*args.num_epochs
 
     for epoch in range(args.num_epochs):
         if epoch == 0:
             if args.anneal_beta:
-                print('Training will be progressing with kld annealing to beta: {args.max_beta}')
+                print('Training will be progressing with kld annealing')
+                if args.anneal_cyclic:
+                    print('The kld annealing will follow cyclic annealing with linear increase strategy')
+                else:
+                    print('The kld annealing will follow a linear strategy')
+
             else:
                 print('Training will be progressing with fixed beta: {args.max_beta}')
 
         print("Epoch", epoch + 1)
 
-        if args.anneal_beta:
-            if args.anneal2descend:
-                new_beta = max(args.min_beta, args.max_beta - scale*epoch)
-            else:
-                new_beta = min(args.max_beta, scale*epoch)
-        else:
-            new_beta = args.max_beta
 
         loss,input_mb, recon_mb, loss_dict = train(model=model,
                 train_loader=train_dataloader,
                 device=device,
                 optimizer=optimizer,
-                beta=new_beta)
+                betas=betas,
+                c_epoch=epoch,
+                txtt=step_metric)
         print(f'epoch [{epoch+1}/{args.num_epochs}], train loss: {round(loss,6)}')
 
         f_name = os.path.join(out_dir, f"{args.exp}_loss_values.txt")
@@ -179,10 +205,8 @@ def main(args):
                 #tensor_img_to_01(
                     torch.cat((
                         torch.flip(input_mb[:, :3, :, :], dims=(1,)),
-                        torch.flip(recon_mb[:, :3, :, :], dims=(1,)),
-                    ), dim=0)
-                #)
-                ,
+                        torch.flip(recon_mb[:, :3, :, :], dims=(1,))),
+                        dim=0),
                 nrow=batch_size
             )
             utils.save_image(
@@ -191,10 +215,13 @@ def main(args):
                 )  # f"torch_results/{args.exp}_img_train_{epoch + 1}.png"
             model.eval()
             input_test_mb, recon_test_mb, gts = eval(model=model,
-                                                         test_loader=test_dataloader,
+                                                         test_loader=test_dataloader[4],
                                                          device=device, with_mask=args.with_mask)
 
             model.train()
+            #print(input_test_mb.shape, 'input test shape')
+            #print(recon_test_mb.shape,'reconstructed test image shape')
+
             img_test = utils.make_grid(
                     torch.cat((
                         torch.flip(input_test_mb[:, :3, :, :], dims=(1,)),
@@ -206,7 +233,7 @@ def main(args):
                     img_test,
                     f"{res_dir}/{args.exp}_img_test_{epoch + 1}.png"  
                 )  # f"torch_results/{args.exp}_img_test_{epoch + 1}.png"
-
+    step_metric.close()
 if __name__ == "__main__":
     args = parse_args()
     main(args)

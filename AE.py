@@ -54,9 +54,9 @@ class SSAE(nn.Module):
             *self.encoder_layers,
         )
         self.final_encoder = nn.Sequential(
-            nn.Conv2d(128, self.z_dim, kernel_size=1,
+            nn.Conv2d(256, self.z_dim, kernel_size=1,
             stride=1, padding=0)
-        ) # self.max_depth_conv  repace 2048
+        ) # self.max_depth_conv  repace 2048, 128, 256
 
         self.initial_decoder = nn.Sequential(
             nn.ConvTranspose2d(self.z_dim, self.max_depth_conv,
@@ -119,7 +119,7 @@ class SSAE(nn.Module):
         buttom = mod_dif_abs*rec_dif
 
         a = (self.lamda/torch.norm(Mn,1))*torch.norm(top,2)
-        b = ((1-self.lamda)/torch.norm(buttom_,1))*torch.norm(Mm*buttom,2) 
+        b = ((1-self.lamda)/torch.norm(buttom_,1))*torch.norm(buttom,2)  # Mm*buttom 
         loss = a-b
 
         print(f'{a.item()}--> {b.item()}--> {loss.item()}')
