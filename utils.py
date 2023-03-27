@@ -11,8 +11,9 @@ from ssvae import SSVAE
 from c_ssvae import SS_CVAE
 from mvtec_models import SS_AEmvtec, SS_CVAEmvtec
 import time
-import math
 import json
+import math
+import re
 import argparse
 import matplotlib
 matplotlib.use('Agg')  
@@ -32,24 +33,31 @@ def parse_args():
     parser.add_argument("--lamda", help="To balance loss from modifed image part", default=0.5, type=float)
     parser.add_argument("--exp", help="The expession text for the file saving", default=time.strftime("%Y%m%d-%H%M%S"))
     parser.add_argument("--nb_channels", default=4, type=int)
+    
     parser.add_argument("--force_train", dest='force_train', action='store_true')
     parser.set_defaults(force_train=False)
     parser.add_argument("--force_cpu", dest='force_cpu', action='store_true')
     parser.add_argument("--dst_dir", help='full path to output directory to save logs and prediction results', type=str, default=os.getcwd())
     parser.add_argument("--data_dir", help='path to dataset dir that contain train and test folders', type=str)
+    
     parser.add_argument("--with_prob", help='To return the probability aray for a mask fr trainset', dest='with_prob', action='store_true')
     parser.set_defaults(with_prob=False) # c_treshold
+    
     parser.add_argument("--with_mask", help='Whether to return the mask during testing phase', dest='with_mask', action='store_true')
     parser.set_defaults(with_mask=False) # c_treshold
 
     parser.add_argument("--max_beta", help="Beta term for kld annealing, if anneal if true, it will progress from min_beta", default=0.5, type=float)
     parser.add_argument("--min_beta", help="Base beta value for kld annealing", default=0.0, type=float)
+    
     parser.add_argument("--anneal_beta", help='Whether to anneal beta or not', dest='anneal_beta',action='store_true')
     parser.set_defaults(anneal_beta=False)  # save_preds
 
-    parser.add_argument("--anneal_cyclic", help='Whether to follow cclic annealing schedule', dest='anneal_cyclic',action='store_true')
+    parser.add_argument("--anneal_cyclic", help='Whether to follow cyclic annealing schedule', dest='anneal_cyclic',action='store_true')
     parser.set_defaults(anneal_cyclic=False)
-
+    
+    parser.add_argument("--with_condition", help='Whether to use additional conditioning variable', dest='with_condition', action='store_true')
+    parser.set_defaults(with_condition=False)
+    
     parser.add_argument("--save_preds", help='Whether to save predicted images during tesing phase', dest='save_preds',action='store_true')
     parser.set_defaults(save_preds=False)
 
@@ -61,7 +69,8 @@ def parse_args():
 
     parser.add_argument("--cycle", help='The number of ccles to oscilate the beta value within a total training steps', default=4, type=int)
     parser.add_argument("--ratio", help='ratio of training steps within a cycle where beta is suppose to anneal and the rest is kept to B==1', default=0.5, type=float)
-    parser.add_argument("--data", help='The data folder to use for training and testing, either one folder or "all" ', default='all', type=str)
+    parser.add_argument('--data', type=lambda s: re.split(',', s), help='list of selected folders separated with comma without space or "all" to loop through all datasets ')
+
     return parser.parse_args()
 
 # parser.add_argument("--func", help='strateg to create a wek mask, either NDVI or intensity', type=str, default="NDVI", required=False)
@@ -82,7 +91,7 @@ def computeLinearBeta(num_epochs=100, steps_per_epoch=20, cycle=4, ratio=0.5, pl
     plot: Boolean value whether to plot the computed beta values
     '''
     tot = num_epochs*steps_per_epoch
-    period = int(num_epochs/cycle)
+    period = math.ceil(num_epochs/cycle)
     period_num_steps = period*steps_per_epoch
     increase_steps = period_num_steps*ratio
     scale = 1/increase_steps
@@ -95,7 +104,8 @@ def computeLinearBeta(num_epochs=100, steps_per_epoch=20, cycle=4, ratio=0.5, pl
     if plot:
         plt.plot(data)
         plt.show()
-    if len(data)>tot:
+    if len(data)>=tot: # f'The computed number of betas {len(data)} is less than the expected number of betas {tot}. Please try the computation'
+        print('Bacuse of rounding process, the computed number of betas {len(data)} is greater than the expected number of betas {tot}. Last values will be cliped, if this is not stable process, please try to check')
         data = data[:tot]
     return data
 
@@ -120,12 +130,13 @@ def load_ssae(args):
             nb_channels=args.nb_channels,
         )
     if args.model == "ss_cvae":
-        print(f'with specified model param { args.model} without kld annealing: self-supervised conditional variational autoencoder will be loaded')
+        print(f'with specified model param {args.model} without kld annealing: self-supervised conditional variational autoencoder will be loaded')
         model = SS_CVAE(latent_img_size=args.latent_img_size,
-                z_dim=args.z_dim,
-                img_size=args.img_size,
-                nb_channels=args.nb_channels,
-                mask_nb_channel=args.nb_channels
+                        z_dim=args.z_dim,
+                        img_size=args.img_size,
+                        nb_channels=args.nb_channels,
+                        mask_nb_channel=args.nb_channels,
+                        with_condition=args.with_condition
                 )
 
     return model
@@ -143,15 +154,19 @@ def load_model_parameters(model, file_name, dir1, device):
 def get_train_dataloader(args):
     # print(f'The histogram equalizaion is set to: {args.equalize}')
     # print(f'The ndvi treshold is set to: {args.ndvi_treshold}')
+    print(f'the folders to load the data: {args.data}')
     
     if os.path.exists(args.data_dir):
         if args.dataset == 'camp':
             print(f'All CAMP dataset will be loaded for training from {args.data_dir}')
-            # assert os.path.exists(args.params_file), f'The preprocessing params file {args.params_file} is not existing, please check'
+            #assert os.path.exists(args.params_file), f'The preprocessing params file {args.params_file} is not existing, please check'
             with open('params_file.txt', "r") as params_log:
                 params = json.load(params_log)
-            if args.data == 'all':
-                folds = list(os.listdir(args.data_dir)) # list of datasaet folders containing training and testing data
+            if len(args.data) >=2 or 'all' in args.data:
+                if 'all' in args.data:
+                    folds = list(os.listdir(args.data_dir)) # list of datasaet folders containing training and testing data
+                else:
+                    folds = args.data
                 inds = [folds.index(fold) for fold in folds] # index o each folder in the list for later use
                 paths = [args.data_dir + f'/{folder}' for folder in folds] # dataset paths taken directly from the list
                 train_dataset = [TrainDataset(root=paths[ind],
@@ -163,7 +178,8 @@ def get_train_dataloader(args):
                                               fake_dataset_size=args.fake_dataset_size,
                                               c_treshold=params[folds[ind]]['contrast_treshold'],
                                               b_treshold=params[folds[ind]]['brightness_treshold'],
-                                              with_prob=args.with_prob) for ind in inds
+                                              with_prob=args.with_prob,
+                                              with_condition=args.with_condition) for ind in inds
                                 ]
                 #train_dataset = torch.utils.data.ConcatDataset(train_dataset)
                 print(f'Concatenated camp test datset size: {len(train_dataset)}')
@@ -171,15 +187,16 @@ def get_train_dataloader(args):
                 print(f'{args.data} CAMP dataset will be loaded for training from {args.data_dir}')
                 path = args.data_dir + f'/{args.data}'
                 train_dataset = TrainDataset(root=path,
-                                             func=params[args.data]['func'],
-                                             equalize=params[args.data]['equalize'],
+                                             func=params[args.data[0]]['func'],
+                                             equalize=params[args.data[0]]['equalize'],
                                              nb_channels=args.nb_channels,
-                                             ndvi_treshold=params[args.data]['ndvi_treshold'],
-                                             intensity_treshold=params[args.data]['intensity_treshold'],
+                                             ndvi_treshold=params[args.data[0]]['ndvi_treshold'],
+                                             intensity_treshold=params[args.data[0]]['intensity_treshold'],
                                              fake_dataset_size=args.fake_dataset_size,
-                                             c_treshold=params[args.data]['contrast_treshold'],
-                                             b_treshold=params[args.data]['brightness_treshold'],
-                                             with_prob=args.with_prob
+                                             c_treshold=params[args.data[0]]['contrast_treshold'],
+                                             b_treshold=params[args.data[0]]['brightness_treshold'],
+                                             with_prob=args.with_prob,
+                                             with_codition=args.with_condition
                                             )
         else:
             print('MVtECH dataset will be loaded for training')
@@ -188,7 +205,7 @@ def get_train_dataloader(args):
         raise RuntimeError("No / Wrong file folder provided")
 
     print(f'Final train dataset length: {len(train_dataset)}')
-    if args.data == 'all':
+    if len(args.data) >=2 or 'all' in args.data:
         train_dataloader = [DataLoader(train_dataset[i],
                                   batch_size=args.batch_size,
                                   shuffle=True,
@@ -207,27 +224,32 @@ def get_train_dataloader(args):
     return train_dataloader
 
 def get_test_dataloader(args, fake_dataset_size=None): # categ=None is added
+    print(f'The test dataset could be loaded from: {args.data}')
     if os.path.exists(args.data_dir):
         if args.dataset == 'camp':
             print(f'All CAMP dataset will be loaded for training from {args.data_dir}')
             # assert os.path.exists(args.params_file), f'The preprocessing params file {args.params_file} is not existing, please check'
             with open("params_file.txt", "r") as params_log:
                 params = json.load(params_log)
-            if args.data == 'all':
+            if len(args.data) >=2: #'all':
                 print(f'All CAMP dataset will be loaded for testing from {args.data_dir}')
-                folds = list(os.listdir(args.data_dir)) # list of datasaet folders containing training and testing data
+                if 'all' in args.data:
+                    folds = list(os.listdir(args.data_dir)) # list of datasaet folders containing training and testing data
+                else:
+                    folds = args.data
                 inds = [folds.index(fold) for fold in folds] # index o each folder in the list for later use
                 paths = [args.data_dir + f'/{folder}' for folder in folds] # dataset paths taken directly from the list
                 test_dataset = [TestDataset(paths[ind],
-                                   fake_dataset_size=fake_dataset_size,
-                                   func=params[folds[ind]]['func'],
-                                   equalize=params[folds[ind]]['equalize'],
-                                   ndvi_treshold=params[folds[ind]]['ndvi_treshold'],
-                                   intensity_treshold=params[folds[ind]]['intensity_treshold'],
-                                   nb_channels=args.nb_channels,
-                                   c_treshold=params[folds[ind]]['contrast_treshold'],
-                                   b_treshold=params[folds[ind]]['brightness_treshold'],
-                                   with_mask=args.with_mask) for ind in inds
+                                            fake_dataset_size=fake_dataset_size,
+                                            func=params[folds[ind]]['func'],
+                                            equalize=params[folds[ind]]['equalize'],
+                                            ndvi_treshold=params[folds[ind]]['ndvi_treshold'],
+                                            intensity_treshold=params[folds[ind]]['intensity_treshold'],
+                                            nb_channels=args.nb_channels,
+                                            c_treshold=params[folds[ind]]['contrast_treshold'],
+                                            b_treshold=params[folds[ind]]['brightness_treshold'],
+                                            with_mask=args.with_mask,
+                                            with_condition=args.with_condition) for ind in inds
                                ]
                 #test_dataset =  torch.utils.data.ConcatDataset(test_dataset)
                 print(f'Concatenated camp test datset size: {len(test_dataset)}')
@@ -236,14 +258,15 @@ def get_test_dataloader(args, fake_dataset_size=None): # categ=None is added
                 path = args.data_dir + f'/{args.data}'
                 test_dataset = TestDataset(path,
                                            fake_dataset_size=fake_dataset_size,
-                                           func=params[args.data]['func'],
-                                           equalize=params[args.data]['equalize'],
-                                           ndvi_treshold=params[args.data]['ndvi_treshold'],
-                                           intensity_treshold=params[args.data]['intensity_treshold'],
+                                           func=params[args.data[0]]['func'],
+                                           equalize=params[args.data[0]]['equalize'],
+                                           ndvi_treshold=params[args.data[0]]['ndvi_treshold'],
+                                           intensity_treshold=params[args.data[0]]['intensity_treshold'],
                                            nb_channels=args.nb_channels,
-                                           c_treshold=params[args.data]['contrast_treshold'],
-                                           b_treshold=params[args.data]['brightness_treshold'],
-                                           with_mask=args.with_mask
+                                           c_treshold=params[args.data[0]]['contrast_treshold'],
+                                           b_treshold=params[args.data[0]]['brightness_treshold'],
+                                           with_mask=args.with_mask,
+                                           with_condition=args.with_condition
                                           )
             print(f'Camp test datset size: {len(test_dataset)}')
         else:
@@ -252,7 +275,7 @@ def get_test_dataloader(args, fake_dataset_size=None): # categ=None is added
     else:
         raise RuntimeError("No / Wrong file folder provided")
     print(f'Final test dataset lengt: {len(test_dataset)}')
-    if args.data == 'all':
+    if len(args.data) >=2 or 'all' in args.data: # 'all':
         test_dataloader = [DataLoader(test_dataset[i],
         batch_size=args.batch_size_test,
         num_workers=12,

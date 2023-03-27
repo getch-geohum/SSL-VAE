@@ -117,7 +117,7 @@ class GeneratEmbedFeatures:
         
     def generate_tsne_features(self):
         if not os.path.exists(self.out_root):
-            os.makedirs(out_root, exist_ok=True)
+            os.makedirs(self.out_root, exist_ok=True)
         folds = os.listdir(self.data_root)
 
         sit_ind = []
@@ -625,8 +625,8 @@ class GeneratEmbedFeatures:
 
 def argumentParser():
     parser = argparse.ArgumentParser(description = 'Deep feature space embeding plot')
-    parser.add_argument('--data_root', help='data folder, can be either with single task or multi task', type=str, required=False, default='D:/DATA/MVCamp/FEATURSPACE/features')
-    parser.add_argument('--save_dir', help = 'main root to save the test result', type = str, required=False, default='D:/DATA/MVCamp/FEATURSPACE/PLOTS')
+    parser.add_argument('--data_root', help='data folder, can be either with single task or multi task', type=str, required=False, default='D:/DATA/MVCamp/FEATURSPACE_all_anneal/features')
+    parser.add_argument('--save_dir', help = 'main root to save the test result', type = str, required=False, default='D:/DATA/MVCamp/FEATURSPACE_all_anneal/PLOTS')
     
     arg = parser.parse_args()
     return arg

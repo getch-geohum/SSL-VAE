@@ -106,15 +106,15 @@ def test(args):
 
         #print(f'Reconstruction shape: {x_rec.shape}')
         #print(f'shape of rec: {x_rec.shape}; shape of imgs: {imgs.shape}')
-        score, ssim_map = dissimilarity_func(x_rec[0],imgs[0], 11)  
+        score, ssim_map = dissimilarity_func(x_rec[0],imgs[0][:4], 11)  
 
         ssim_map = ((ssim_map - np.amin(ssim_map)) / (np.amax(ssim_map) - np.amin(ssim_map))) # normalized structural similarity index
 
-        mad = torch.mean(torch.abs(x_rec[0]-imgs[0]), dim=0) # mean absolute deviation mean(|Xrec-X|)  
+        mad = torch.mean(torch.abs(x_rec[0]-imgs[0][:4]), dim=0) # mean absolute deviation mean(|Xrec-X|)  
         mad = mad.detach().cpu().numpy()
         mad = ((mad - np.amin(mad)) / (np.amax(mad) - np.amin(mad)))
 
-        mad_a = torch.mean(torch.norm((x_rec[0]-imgs[0]), 2,dim=0, keepdim=True), dim=0) # mean(||Xrec-X||2
+        mad_a = torch.mean(torch.norm((x_rec[0]-imgs[0][:4]), 2,dim=0, keepdim=True), dim=0) # mean(||Xrec-X||2
         mad_a = mad_a.detach().cpu().numpy()
         mad_a = ((mad_a - np.amin(mad_a)) / (np.amax(mad_a) - np.amin(mad_a)))
 

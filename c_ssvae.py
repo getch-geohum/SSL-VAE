@@ -13,7 +13,7 @@ import copy
 
 class SS_CVAE(nn.Module):
     
-    def __init__(self, img_size, nb_channels, latent_img_size, z_dim, mask_nb_channel=4):
+    def __init__(self, img_size, nb_channels, latent_img_size, z_dim, mask_nb_channel=4, with_condition=True):
         '''
         '''
         super(SS_CVAE, self).__init__()
@@ -28,7 +28,10 @@ class SS_CVAE(nn.Module):
         self.max_depth_conv = 2 ** (4 + self.nb_conv)
         print(f'Maximum depth conv: {self.max_depth_conv}')
         
-        self.exit_nb_channel = self.nb_channels-1 # self.mask_nb_channel   # changed part
+        if with_condition:
+            self.exit_nb_channel = self.nb_channels - 1 # self.mask_nb_channel   # changed part
+        else:
+            self.exit_nb_channel = self.nb_channels
         self.code_nb_channel = self.z_dim + self.mask_nb_channel # number of channels when we concatenate q(z|x,y) with y
 
         self.resnet = resnet34(weights=None) # resnet18(pretrained=False)
@@ -169,13 +172,18 @@ class SS_CVAE(nn.Module):
         rec = self.xent_continuous_ber(recon_x, X)
 
         rec_raw = torch.sum(Mn*(P+rec),dim=(1,2,3)) + torch.sum(Mm*(P+rec),dim=(1,2,3))  # the norm is computed on channel dim
-        #rec_raw = torch.mean(torch.sum(Mn*(rec+P), dim=(1)), dim=(1,2))*w_n + torch.mean(torch.sum(Mm * (rec+P), dim=(1)),dim=(1,2))*w_m  # the reduction is computed on channel dim
+        #rec_raw = torch.mean(torch.sum(Mn*(rec+P), dim=(1)), dim=(1,2))*w_n + torch.mean(torch.sum(Mm * (rec+P), dim=(1)),dim=(1,2))*w_m  # ton channel dim
 
-        rec_term = torch.mean(rec_raw)
-        kld = torch.mean(self.kld())
+        #rec_term = torch.mean(rec_raw)
+        #kld = torch.mean(self.kld())
 
-        L = rec_term + beta*kld
+        #L = rec_term + beta*kld # this should be discussed
 
+        # L = torch.mean(rec_term + beta*self.kld())
+
+        kld = self.kld()
+
+        L = torch.mean(rec_raw + beta*kld)
 
 
         loss = L
@@ -183,9 +191,9 @@ class SS_CVAE(nn.Module):
 
         loss_dict = {
             'loss': loss,
-            'rec_term': rec_term,
-            'kld': kld,
-            'beta*kld':beta*kld
+            'rec_term': torch.mean(rec_raw),
+            'kld': torch.mean(kld),
+            'beta*kld':torch.mean(beta*kld)
         } # the key is left not to modif entire workflow
 
         return loss, loss_dict
@@ -203,7 +211,7 @@ class SS_CVAE(nn.Module):
         rec, _ = self.forward(Xm)
         #print(f'shape of rec: {rec.shape}')
 
-        loss, loss_dict = self.compute_loss(X=Xm[:,:self.nb_channels-1,:,:], Mm=Mm[:,:self.nb_channels-1,:,:], Mn=Mn[:,:self.nb_channels-1,:,:], prob=prob[:,:self.nb_channels-1,:,:], recon_x=rec, beta=beta)  # 
+        loss, loss_dict = self.compute_loss(X=Xm[:,:self.exit_nb_channel,:,:], Mm=Mm[:,:self.exit_nb_channel,:,:], Mn=Mn[:,:self.exit_nb_channel,:,:], prob=prob[:,:self.exit_nb_channel,:,:], recon_x=rec, beta=beta)  # 
 
         rec = self.mean_from_lambda(rec)
 

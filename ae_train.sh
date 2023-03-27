@@ -10,25 +10,26 @@ python ae_train.py\
 	--batch_size=16\
 	--batch_size_test=8\
 	--latent_img_size=32\
-        --z_dim=256\
-        --lamda=0.9\
-        --nb_channels=5\
-        --fake_dataset_size=1040\
-        --params_id=100\
-        --dst_dir=D:/DATA/MVCamp/FEATURSPACE__\
-        --data_dir=D:/DATA/rawdata/campp\
-        --data=all\
-        --max_beta=1\
+    	--z_dim=256\
+    	--lamda=0.9\
+    	--nb_channels=5\
+    	--fake_dataset_size=1020\
+    	--params_id=100\
+    	--dst_dir=D:/DATA/MVCamp\
+    	--data_dir=D:/DATA/rawdata\
+    	--data=Minawao_june_2016,Minawao_feb_2017\
+    	--max_beta=1\
 	--min_beta=0\
-        --cycle=6\
-        --ratio=0.5\
-        --dataset=camp\
-        --texture=carpet\
+    	--cycle=6\
+    	--ratio=0.5\
+    	--dataset=camp\
+    	--texture=carpet\
 	--with_mask\
 	--force_train\
 	--with_prob\
 	--anneal_beta\
 	--anneal_cyclic\
+    	--with_condition\
 
 #done
 # dataset could be either "camp" or "mvtec"

@@ -13,40 +13,23 @@ import matplotlib.pyplot as plt
 from skimage.io import imread
 from skimage.color import rgb2hsv
 import cv2
-import elasticdeform  # elastic deform 
+import elasticdeform  # elastic deform package for arteficial anomaly creation using elastic deformation modules 
 
-def makeConditionVar(img,out = 'hue'):
-    data = img[:,:,:3]
-    var = rgb2hsv(data)
-    if out == 'hue':
-        return var[:,:,0]
-    elif out == 'saturation':
-        return var[:,:,1]
-    elif out == 'value':
-        return var[:,:,2]
-    elif out == 'max':
-        return np.max(var, axis=-1)
-    elif out == 'min':
-        return np.min(var, axis=-1)
-    elif out == 'mean':
-        return np.mean(var, axis=-1)
-
-
-def make_normal(img, with_cvar=True):
+def make_normal(img, with_condition=True):
     if img.shape[-1] == 3:
         #print(f'Before shape: {img.shape}')
         img = np.dstack((img, np.mean(img, axis=-1).astype(img.dtype)))
         #print(f'After shape: {img.shape}')
     assert img.shape[-1] == 4, 'image normalization problem'
     data = np.clip(((img - np.amin(img))+0.00001) / ((np.amax(img) - np.amin(img))+0.00001), 0,1)
-    if not with_cvar:
+    if not with_condition:
         return data
     else:
         cvar = makeConditionVar(data) # conditioning variable which we assume d/t in every dataset
         data = np.dstack((data,cvar))
         return data
 
-def NDVI(image, channel='first', normalize=True, func=True):
+def NDVI(image, channel='first', normalize=True):
         if normalize:
             if func:
                 image = make_normal(image)
@@ -54,14 +37,34 @@ def NDVI(image, channel='first', normalize=True, func=True):
                 image = image/1000
 
         if channel=='first':
-            r = image[-2, :, :]
-            n = image[-1, :, :]
+            r = image[2, :, :]
+            n = image[3, :, :]
         else:
-            r = image[:, :, -2]
-            n = image[:, :, -1]
+            r = image[:, :, 2]
+            n = image[:, :, 3]
         const = 0.0000001
         ndvi = ((n-r)+const)/((r+n)+const)
         return ndvi
+    
+def makeConditionVar(img, out = 'ndvi'):
+    if out == 'ndvi':
+        ndvi = NDVI(image=img, channel='last', normalize=False)
+        return ndvi
+    else:
+        data = img[:,:,:3]
+        var = rgb2hsv(data)
+        if out == 'hue':
+            return var[:,:,0]
+        elif out == 'saturation':
+            return var[:,:,1]
+        elif out == 'value':
+            return var[:,:,2]
+        elif out == 'max':
+            return np.max(var, axis=-1)
+        elif out == 'min':
+            return np.min(var, axis=-1)
+        elif out == 'mean':
+            return np.mean(var, axis=-1)
 
 def grayIntensity(x, equalize=False, treshold=120, b_treshold=0, c_treshold=0, nb_channels=4):# 120
     # print(f'b_treshold: {b_treshold}')
@@ -133,7 +136,7 @@ def channelIntensity(x, channel_tresholds=[0.75, 0.65, 0.65, 0.65], channel='las
         
 def ndviMasker(x, treshold=0.2, nb_channels=None):
     #print(f'before ndvi shape: {x.shape}')
-    ndvi = NDVI(image=x, channel='last', normalize=False, func=True)
+    ndvi = NDVI(image=x, channel='last', normalize=False)
     mask = np.where(ndvi<=treshold,1,0).astype(np.uint8)
     mask_clean = cv2.morphologyEx(mask,cv2.MORPH_OPEN,np.ones((3,3), int), iterations = 1) 
     big_mask = np.dstack([mask_clean]*nb_channels) 
@@ -164,7 +167,8 @@ class TrainDataset(Dataset):
         fake_dataset_size=None,
         c_treshold=0,
         b_treshold=0,
-        with_prob=True
+        with_prob=True,
+        with_condition=True
     ):
         self.root = root
         self.func = func
@@ -172,16 +176,18 @@ class TrainDataset(Dataset):
         self.ndvi_treshold = ndvi_treshold
         self.intensity_treshold = intensity_treshold
         self.nb_channels = nb_channels
-        self.fake_dataset_size = fake_dataset_size
+        #self.fake_dataset_size = fake_dataset_size
         self.c_treshold = c_treshold
         self.b_treshold = b_treshold
         self.with_prob = with_prob
+        self.with_condition = with_condition
         
         self.train_path = f'{self.root}/train'
         self.test_path = f'{self.root}/test'
         
         self.img_dir = sorted(glob(f'{self.train_path}/images/*.tif'))
         self.lbl_dir = sorted(glob(f'{self.test_path}/images/*.tif'))
+        self.fake_dataset_size = len(self.lbl_dir)
         print('============================================')
         print("Number of train images", len(self.img_dir), 
                 "Number of test images", len(self.lbl_dir),
@@ -192,7 +198,7 @@ class TrainDataset(Dataset):
         print('============================================')
 
         if ((self.fake_dataset_size is not None)
-            and (self.fake_dataset_size < len(self.img_dir))):
+            and (self.fake_dataset_size <= len(self.img_dir))): #self.img_dir trick to limit only for test datset size
             #inds = list(range(min(len(self.lbl_dir), len(self.img_dir))))
             inds = list(range(len(self.img_dir)))
             print(f'Length of indexes for sampling: {len(inds)}')
@@ -203,7 +209,7 @@ class TrainDataset(Dataset):
             print("Number of train images after restriction", len(self.img_dir), 
                 "Number of test images after restriction", len(self.lbl_dir))
 
-        self.image_array = self.image2Array(self.img_dir)   # read image arra
+        self.image_array = self.image2Array(self.img_dir, condition=self.with_condition)   # read image arra
         self.mask_array = self.computeMask(self.lbl_dir,
                                            func=self.func,
                                            ndvi_treshold=self.ndvi_treshold,
@@ -253,11 +259,17 @@ class TrainDataset(Dataset):
         ])
 
     
-    def image2Array(self, images):
-        return [make_normal(imread(image)) for image in images]
+    def image2Array(self, images, condition=False):
+        return [make_normal(imread(image),with_condition=condition) for image in images]
         
     def computeMask(self, files, func='NDVI', ndvi_treshold=None, intensity_treshold=None, equalize=None, c_treshold=None, b_treshold=None, nb_channels=None):
-        arrays = self.image2Array(files)
+        
+        #if self.with_condition:
+        #    nb_channels = nb_channels-1
+        #else:
+        #    nb_channels = nb_channels
+            
+        arrays = self.image2Array(files, condition=self.with_condition)
         if func == 'NDVI': 
             masks = [ndviMasker(img, treshold=ndvi_treshold, nb_channels=nb_channels) for img in arrays] 
         else: 
@@ -296,7 +308,8 @@ class TestDataset(Dataset):
                  fake_dataset_size=None,
                  c_treshold=0,
                  b_treshold=0,
-                 with_mask=True):
+                 with_mask=False,
+                 with_condition=True):
         self.root = root
         self.func=func
         self.equalize=equalize
@@ -309,6 +322,7 @@ class TestDataset(Dataset):
         self.nb_channels = nb_channels
         self.c_treshold = c_treshold
         self.b_treshold = b_treshold
+        self.with_condition = with_condition
         
         self.img_dir = sorted(glob(f'{self.test_path}/images/*.tif'))
         self.lbl_dir = sorted(glob(f'{self.test_path}/labels/*.tif'))
@@ -319,7 +333,7 @@ class TestDataset(Dataset):
             self.img_dir = [self.img_dir[ind] for ind in sample]
             self.lbl_dir = [self.lbl_dir[ind] for ind in sample]
 
-        self.image_array = self.image2Array(self.img_dir, normalize=True)   # read image arra
+        self.image_array = self.image2Array(self.img_dir, normalize=True, condition=self.with_condition)   # read image arra
         self.lbl_array = self.image2Array(self.lbl_dir, normalize=False)   # read image arra and compute array
         if self.with_mask:
             self.mask_array = self.computeMask(self.img_dir,
@@ -343,16 +357,16 @@ class TestDataset(Dataset):
         ])
 
     
-    def image2Array(self, images, normalize=False):
+    def image2Array(self, images, normalize=False, condition=False):
         if not normalize:
             return [imread(image).astype(float) for image in images]
         else:
-            return [make_normal(imread(image).astype(float)) for image in images]
+            return [make_normal(imread(image).astype(float),with_condition=condition) for image in images]
         
     def computeMask(self, files, func='NDVI', ndvi_treshold=None, intensity_treshold=None, equalize=None, c_treshold=None, b_treshold=None, nb_channels=None):
         arrays = self.image2Array(files, normalize=True)
         if func == 'NDVI': 
-            masks = [ndviMasker(img, treshold=ndvi_treshold, nb_channels=nb_channels) for img in arrays] 
+            masks = [ndviMasker(img, treshold=ndvi_treshold, nb_channels=nb_channels-1) for img in arrays] 
         else: 
             if func == 'grayIntensity':
                 masks = [grayIntensity(img, equalize=equalize, treshold=intensity_treshold, c_treshold=c_treshold, b_treshold=b_treshold, nb_channels=nb_channels) for img in arrays]

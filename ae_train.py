@@ -15,7 +15,7 @@ import random
 from utils import * 
 
 
-def train(model, train_loader, device, optimizer, betas, c_epoch, txtt):
+def train(model, train_loader, device, optimizer, betas, c_epoch, txtt,scheduler=None):
     random.shuffle(train_loader)
     model.train()
     train_loss = 0
@@ -46,7 +46,7 @@ def train(model, train_loader, device, optimizer, betas, c_epoch, txtt):
 
                 loss.backward()
             elif type(model) is SSVAE or type(model) is SS_CVAE or type(model) is SS_CVAEmvtec:
-                step_beta = betas[(c_epoch-1)*step_per_epoch + controler] # betas[c_epoch*len(train_loader)+batch_idx]  # betas[(c_epoch-1)*step_per_epoch + controler] 
+                step_beta = betas[(c_epoch)*step_per_epoch + controler] # betas[c_epoch*len(train_loader)+batch_idx]  # betas[(c_epoch-1)*step_per_epoch + controler] 
                 loss, rec_im, loss_dict_new = model.step(
                 (a, b, c, d, e), beta=step_beta)
 
@@ -58,6 +58,7 @@ def train(model, train_loader, device, optimizer, betas, c_epoch, txtt):
 
             loss_dict = update_loss_dict(loss_dict, loss_dict_new)   # update_loss_dict need fixation
             optimizer.step()
+            scheduler.step()
             controler+=1
     
     train_loss /= controler
@@ -147,17 +148,18 @@ def main(args):
     step_metric.write("beta,kld, beta_kld,rec_term,total\n")
     
     ###############################################################################
-    if args.data == 'all':
+    if 'all' in args.data or len(args.data)>=0:
         nsteps = sum([len(loader) for loader in train_dataloader])  # steps per per epoch
     else:
         nsteps = len(train_dataloader)
     ###############################################################################
     scale = (args.max_beta - args.min_beta) / (args.num_epochs*nsteps)
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=optimizer,T_max=nsteps*args.num_epochs, eta_min=1e-7)
 
     if args.anneal_beta:
         if args.anneal_cyclic:
             betas = computeLinearBeta(num_epochs=args.num_epochs, steps_per_epoch=nsteps, cycle=args.cycle, ratio=args.ratio)
-            assert len(betas) == nsteps*args.num_epochs, 'number of betas {len(betas)} and total training steps {nsteps*args.num_epochs} were not the same'
+            assert len(betas) == nsteps*args.num_epochs, f'number of betas {len(betas)} and total training steps {nsteps*args.num_epochs} were not the same'
         else:
             betas = [np.round(i*scale, 4) for i in range(args.num_epochs*nsteps)]
     else:
@@ -184,7 +186,8 @@ def main(args):
                 optimizer=optimizer,
                 betas=betas,
                 c_epoch=epoch,
-                txtt=step_metric)
+                txtt=step_metric,
+                scheduler=lr_scheduler)
         print(f'epoch [{epoch+1}/{args.num_epochs}], train loss: {round(loss,6)}')
 
         f_name = os.path.join(out_dir, f"{args.exp}_loss_values.txt")
@@ -215,7 +218,7 @@ def main(args):
                 )  # f"torch_results/{args.exp}_img_train_{epoch + 1}.png"
             model.eval()
             input_test_mb, recon_test_mb, gts = eval(model=model,
-                                                         test_loader=test_dataloader[4],
+                                                         test_loader=test_dataloader[0],
                                                          device=device, with_mask=args.with_mask)
 
             model.train()

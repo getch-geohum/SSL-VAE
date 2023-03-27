@@ -1,6 +1,6 @@
 #!/bin/bash
 
-for fold in Kutuplong_dec_2017
+for fold in kutupalong_sept_2017 Deghale_Apr_2017 Kule_tirkidi_jun_2018 Kule_tirkidi_marc_2017 Minawao_feb_2017 Minawao_june_2016 Nguyen_march_2017 Tza_oct_2016 Zamzam_april_2022
 do 
 python ae_test.py\
 	--exp=ss_cvae\
@@ -15,18 +15,17 @@ python ae_test.py\
     	--lamda=0.9\
     	--nb_channels=4\
     	--params_id=100\
-    	--dst_dir=D:/DATA/MVCamp/FEATURSPACE\
+    	--dst_dir=D:/DATA/MVCamp/FEATURSPACE_all_anneal\
     	--data_dir=D:/DATA/rawdata/camp\
 	--data=$fold\
     	--dataset=camp\
 	--texture=carpet\
-	--with_mask\
-    	--with_prob\
     	--save_preds\
+	#--with_mask\
 	#--validate\
 
-mv D:/DATA/MVCamp/FEATURSPACE/predictions D:/DATA/MVCamp/FEATURSPACE/pred_$fold
-mv D:/DATA/MVCamp/FEATURSPACE/torch_features D:/DATA/MVCamp/FEATURSPACE/feat_$fold
+mv D:/DATA/MVCamp/FEATURSPACE_all_anneal/predictions D:/DATA/MVCamp/FEATURSPACE_all_anneal/pred_$fold
+mv D:/DATA/MVCamp/FEATURSPACE_all_anneal/torch_features D:/DATA/MVCamp/FEATURSPACE_all_anneal/feat_$fold
 
 done
 
