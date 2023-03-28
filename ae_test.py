@@ -93,6 +93,7 @@ def test(args):
 
     pbar = tqdm(test_dataloader)
     for ii,(imgs, gt) in enumerate(pbar): # changed
+        print(f'SAPES OF IMAGES: {imgs.shape}, SHAPE of ground truth: {gt.shape}')
         imgs = imgs.to(device)
         gt_np = gt[0].cpu().numpy().astype(float)
         #print('Ground truth shape', gt_np.shape)

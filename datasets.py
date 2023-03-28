@@ -363,10 +363,10 @@ class TestDataset(Dataset):
         else:
             return [make_normal(imread(image).astype(float),with_condition=condition) for image in images]
         
-    def computeMask(self, files, func='NDVI', ndvi_treshold=None, intensity_treshold=None, equalize=None, c_treshold=None, b_treshold=None, nb_channels=None):
-        arrays = self.image2Array(files, normalize=True)
+    def computeMask(self, files, func='NDVI', ndvi_treshold=None, intensity_treshold=None, equalize=None, c_treshold=None, b_treshold=None, nb_channels=None,  condition=False):
+        arrays = self.image2Array(files, normalize=True,condition=self.with_condition)
         if func == 'NDVI': 
-            masks = [ndviMasker(img, treshold=ndvi_treshold, nb_channels=nb_channels-1) for img in arrays] 
+            masks = [ndviMasker(img, treshold=ndvi_treshold, nb_channels=nb_channels) for img in arrays] 
         else: 
             if func == 'grayIntensity':
                 masks = [grayIntensity(img, equalize=equalize, treshold=intensity_treshold, c_treshold=c_treshold, b_treshold=b_treshold, nb_channels=nb_channels) for img in arrays]
