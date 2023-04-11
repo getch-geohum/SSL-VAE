@@ -63,16 +63,16 @@ def _main():
     labels_ = []
     ndvi = []
     for i in range((train_dataset[0].__len__())):
-        images_1ch.append(train_dataset[0].__getitem__(i)[0][:3, ::4,::4].flatten().numpy())
+        images_1ch.append(train_dataset[0].__getitem__(i)[0][:3, :, :].flatten().numpy())
         labels.append(-1)#"Minawao_feb_2017")
         labels_.append(np.zeros(images_1ch[0].shape))#"Minawao_june_2016")
-        ndvi.append(train_dataset[0].__getitem__(i)[0][4, ::4,::4].flatten().numpy())
+        ndvi.append(train_dataset[0].__getitem__(i)[0][4, :,:].flatten().numpy())
 
     for i in range((train_dataset[1].__len__())):
-        images_1ch.append(train_dataset[1].__getitem__(i)[0][:3, ::4,::4].flatten().numpy())
+        images_1ch.append(train_dataset[1].__getitem__(i)[0][:3, :,:].flatten().numpy())
         labels.append(1)#"Minawao_june_2016")
         labels_.append(np.ones(images_1ch[0].shape))#"Minawao_june_2016")
-        ndvi.append(train_dataset[1].__getitem__(i)[0][4, ::4,::4].flatten().numpy())
+        ndvi.append(train_dataset[1].__getitem__(i)[0][4, :,:].flatten().numpy())
 
     x = np.stack(images_1ch, axis=0).astype(np.float32)
     rng = np.random.default_rng(12345)
@@ -92,7 +92,7 @@ def _main():
         fig, axes = plt.subplots(len(list_x), len(list_x[0]))
         for j, x in enumerate(list_x):
             for i, x_ in enumerate(x):
-                stand_img = np.moveaxis(x_.reshape(3, 64, 64), 0, 2)
+                stand_img = np.moveaxis(x_.reshape(3, 256, 256), 0, 2)
                 stand_img = ((stand_img - np.amin(stand_img)) /
                     (np.amax(stand_img) - np.amin(stand_img)))
                 axes[j, i].imshow(
@@ -105,11 +105,11 @@ def _main():
     #plt.imshow(x[0].reshape(64, 64))
     #plt.show()
 
-    x = np.concatenate([x, y_], axis=1)
+    #x = np.concatenate([x, y_], axis=1)
     scaler = StandardScaler()
     x_scaled = scaler.fit_transform(x)
 
-    q = 300
+    q = 200
 
     # First PCA to reduce dimensionality
     pca_preproc = PCA(n_components=400, random_state=random_state)
@@ -138,9 +138,14 @@ def _main():
     #    axis=1
     # )
     # Or try covariables corresponding to the one hot encoding of the label
+    dim_constrained = 1
     covars = one_hot_encoder.fit_transform(y.reshape((-1, 1)))
+    #covars = np.concatenate([covars for i in range(dim_constrained)], axis=-1)
     #covars = np.where(covars == 0, -10, 10)
     #covars = (np.repeat(y[:, None], repeats=2, axis=1)) * 10.
+
+    # NOTE: only part of the latent space should be linked to the NN, PCA,
+    # linear model
 
     alpha, sig2, x_embedded_ppcca, W, muhat = ppcca(x_scaled_pca, covars=covars, q=q)
     #print(alpha, sig2)
@@ -148,43 +153,70 @@ def _main():
     #print(W.shape, muhat.shape, x_embedded_ppcca.shape)
     #print(y[1])
     
+    nb_sample_plot = 6
     recs = [pca_preproc.inverse_transform(W @ x_embedded_ppcca[i].T + muhat)[:,
-        :3 * 4096]
-            for i in range(6)]
-    print(recs[0].shape)
-    #plot_several(recs, y[:6])
+        :3 * 65536]
+            for i in range(nb_sample_plot)]
 
+    x_embedded_ppcca_ori = copy.deepcopy(x_embedded_ppcca)
     #Modify reconstructions
     for i in range(len(x_embedded_ppcca)):
-        if y[i] == 1:
-            x_embedded_ppcca = x_embedded_ppcca.at[i, -1].set(10)
-        else:
-            x_embedded_ppcca = x_embedded_ppcca.at[i, -1].set(10)
+        for d_c in range(1, dim_constrained + 1):
+            if y[i] == 1:
+                #x_embedded_ppcca = x_embedded_ppcca.at[i, 0].set(-1)
+                x_embedded_ppcca = x_embedded_ppcca.at[i, -d_c].set(-1)
+            else:
+                #x_embedded_ppcca = x_embedded_ppcca.at[i, 0].set(1)
+                x_embedded_ppcca = x_embedded_ppcca.at[i, -d_c].set(1)
     recs_mod = [pca_preproc.inverse_transform(W @ x_embedded_ppcca[i].T + muhat)[:,
-        :4096 * 3]
-            for i in range(6)]
-    print(recs_mod[0].shape)
-    plot_several([x[:6, :3 * 4096], recs, recs_mod], [y[:6], y[:6], y[:6]])
+        :65536 * 3]
+            for i in range(nb_sample_plot)]
 
-    fig, axes = plt.subplots(1, 6)
+    #for i in range(len(x_embedded_ppcca)):
+    #    for d_c in range(1, dim_constrained + 1):
+    #        if y[i] == 1:
+    #            x_embedded_ppcca = x_embedded_ppcca.at[i, -d_c].set(-10 + rng.normal(scale=0.001))
+    #        else:
+    #            x_embedded_ppcca = x_embedded_ppcca.at[i, -d_c].set(-10 + rng.normal(scale=0.001))
+    #recs_mod_ = [pca_preproc.inverse_transform(W @ x_embedded_ppcca[i].T + muhat)[:,
+    #    :65536 * 3]
+    #        for i in range(nb_sample_plot)]
+    plot_several([x[:nb_sample_plot, :3 * 65536], recs, recs_mod],
+            [y[:nb_sample_plot], y[:nb_sample_plot], y[:nb_sample_plot]])
+
+    fig, axes = plt.subplots(1, 7)
     axes[0].scatter(x_embedded_pca[:, 0], x_embedded_pca[:, 1], c=y)  # , cmap="Set1")
     axes[0].set_xlabel("PC1")
     axes[0].set_ylabel("PC2")
     scatter = axes[1].scatter(x_embedded_ppca[:, 0], x_embedded_ppca[:, 1], c=y)  # , cmap="Set1")
     pca = PCA(n_components=2, random_state=random_state)
-    pca.fit(x_embedded_ppcca[:, :-1])
-    x_embedded_ppcca_red = pca.transform(x_embedded_ppcca[:, :-1])
+    pca.fit(x_embedded_ppcca[:, :-dim_constrained])
+    x_embedded_ppcca_red = pca.transform(x_embedded_ppcca[:, :-dim_constrained])
     scatter = axes[2].scatter(
         x_embedded_ppcca_red[:, 0], x_embedded_ppcca_red[:, 1], c=y
     )  # , cmap="Set1")
     scatter = axes[3].scatter(
          np.zeros(len(x_embedded_ppcca[:, 0])),x_embedded_ppcca[:, 0], c=y
     )  # , cmap="Set1")
+    pca = PCA(n_components=2, random_state=random_state)
+    pca.fit(x_embedded_ppcca)
+    x_embedded_ppcca_red = pca.transform(x_embedded_ppcca)
     scatter = axes[4].scatter(
-         np.zeros(len(x_embedded_ppcca[:, 0])),x_embedded_ppcca[:, 1], c=y
+        x_embedded_ppcca_red[:, 0], x_embedded_ppcca_red[:, 1], c=y
     )  # , cmap="Set1")
+    pca = PCA(n_components=2, random_state=random_state)
+    pca.fit(x_embedded_ppcca_ori[:, -dim_constrained:])
+    x_embedded_ppcca_red = pca.transform(x_embedded_ppcca_ori[:, -dim_constrained:])
     scatter = axes[5].scatter(
-         np.zeros(len(x_embedded_ppcca[:, 0])),x_embedded_ppcca[:, -1], c=y
+         x_embedded_ppcca_red[:, 0], x_embedded_ppcca_red[:, 1], c=y
+        # np.zeros(len(x_embedded_ppcca[:, 0])),x_embedded_ppcca[:, -1], c=y
+    )  # , cmap="Set1")
+    pca = PCA(n_components=2, random_state=random_state)
+    pca.fit(x_embedded_ppcca[:, -dim_constrained:])
+    x_embedded_ppcca_red = pca.transform(x_embedded_ppcca[:, -dim_constrained:])
+    scatter = axes[6].scatter(
+         x_embedded_ppcca_red[:, 0], x_embedded_ppcca_red[:, 1], c=y
+        # np.zeros(len(x_embedded_ppcca[:, 0])),x_embedded_ppcca[:, -1], c=y
     )  # , cmap="Set1")
     fig.show()
     plt.legend(handles=scatter.legend_elements()[0], labels=list(np.arange(10)))
@@ -318,8 +350,8 @@ def ppcca(X, covars, q):
         #)
         covars = jnp.concatenate(
                 #NOTE
-            #[jnp.ones((2, N)), covars.T], axis=0
-            [jnp.zeros((q - 1, N)), covars.T], axis=0
+            [jnp.ones((1, N)), covars.T], axis=0
+            #[jnp.zeros((q - 100, N)), covars.T], axis=0
         )  # now dim (L + 1, N)
         #covars = covars.T
 
@@ -338,28 +370,28 @@ def ppcca(X, covars, q):
     W = temp_vec[:, :q]  # init proj matrix of dim (p, q)
 
     ## initialization of alpha
-    #if null_alpha:
-    alpha = jnp.zeros((q, L + 1))
-    #else:
-    #    scores = jnp.transpose(
-    #        jnp.linalg.inv((W.T @ W) + (sig2 * jnp.diag(jnp.ones(q)))) @ W.T @ Xc.T
-    #    )
-    #    alpha = np.empty((q, L + 1))
-    #    for i in range(q):
-    #        alpha[i] = (
-    #            sm.GLM(
-    #                np.asarray(scores[:, i]),
-    #                np.asarray(
-    #                    covars[
-    #                        0:,
-    #                    ]
-    #                ).T,
-    #                family=sm.families.Gaussian(),
-    #            )
-    #            .fit()
-    #            .params
-    #        )
-    #    alpha = jnp.asarray(alpha)
+    if null_alpha:
+        alpha = jnp.zeros((q, L + 1))
+    else:
+        scores = jnp.transpose(
+            jnp.linalg.inv((W.T @ W) + (sig2 * jnp.diag(jnp.ones(q)))) @ W.T @ Xc.T
+        )
+        alpha = np.empty((q, L + 1))
+        for i in range(q):
+            alpha[i] = (
+                sm.GLM(
+                    np.asarray(scores[:, i]),
+                    np.asarray(
+                        covars[
+                            0:,
+                        ]
+                    ).T,
+                    family=sm.families.Gaussian(),
+                )
+                .fit()
+                .params
+            )
+        alpha = jnp.asarray(alpha)
 
     def _scan_fun(carry, k):  # pylint: disable=unused-argument
         W, sig2, alpha = carry
@@ -368,9 +400,9 @@ def ppcca(X, covars, q):
         M_1 = jnp.linalg.inv(W.T @ W + sig2 * jnp.diag(jnp.ones(q)))
 
         _x_ = M_1 @ (
-            # W.T @ Xc.T + sig2 * (alpha @ covars)
+             W.T @ Xc.T + sig2 * (alpha @ covars)
             # NOTE
-            W.T @ Xc.T + sig2 * covars
+            #W.T @ Xc.T + sig2 * covars
         )  # dim (q, N) or (q, 1) if we strictly follow
         # the formula but we have vectorized the computation over all the samples
         # thanks to the matrix product
@@ -380,7 +412,7 @@ def ppcca(X, covars, q):
 
         # M-Step
         #NOTE
-        #alpha = (_x_ @ covars.T) @ jnp.linalg.inv(covars @ covars.T)  # estimation
+        alpha = (_x_ @ covars.T) @ jnp.linalg.inv(covars @ covars.T)  # estimation
         # of the regression coefficient, vectorized
         W = (Xc.T @ _x_.T) @ jnp.linalg.inv(sum_xx_)  # dim (p, q), estimation
         # of the loadings, same remark, it has been vectorized
