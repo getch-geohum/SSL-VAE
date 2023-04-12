@@ -138,7 +138,7 @@ def _main():
     #    axis=1
     # )
     # Or try covariables corresponding to the one hot encoding of the label
-    dim_constrained = 1
+    dim_constrained = 100
     covars = one_hot_encoder.fit_transform(y.reshape((-1, 1)))
     #covars = np.concatenate([covars for i in range(dim_constrained)], axis=-1)
     #covars = np.where(covars == 0, -10, 10)
@@ -164,10 +164,10 @@ def _main():
         for d_c in range(1, dim_constrained + 1):
             if y[i] == 1:
                 #x_embedded_ppcca = x_embedded_ppcca.at[i, 0].set(-1)
-                x_embedded_ppcca = x_embedded_ppcca.at[i, -d_c].set(-1)
+                x_embedded_ppcca = x_embedded_ppcca.at[i, -d_c].set(-5)
             else:
                 #x_embedded_ppcca = x_embedded_ppcca.at[i, 0].set(1)
-                x_embedded_ppcca = x_embedded_ppcca.at[i, -d_c].set(1)
+                x_embedded_ppcca = x_embedded_ppcca.at[i, -d_c].set(5)
     recs_mod = [pca_preproc.inverse_transform(W @ x_embedded_ppcca[i].T + muhat)[:,
         :65536 * 3]
             for i in range(nb_sample_plot)]
@@ -370,17 +370,18 @@ def ppcca(X, covars, q):
     W = temp_vec[:, :q]  # init proj matrix of dim (p, q)
 
     ## initialization of alpha
+    q_constrained = 100
     if null_alpha:
-        alpha = jnp.zeros((q, L + 1))
+        alpha = jnp.zeros((q_constrained, L + 1))
     else:
         scores = jnp.transpose(
             jnp.linalg.inv((W.T @ W) + (sig2 * jnp.diag(jnp.ones(q)))) @ W.T @ Xc.T
         )
-        alpha = np.empty((q, L + 1))
-        for i in range(q):
-            alpha[i] = (
+        alpha = np.empty((q_constrained, L + 1))
+        for i in range(1, q_constrained + 1):
+            alpha[i - 1] = (
                 sm.GLM(
-                    np.asarray(scores[:, i]),
+                    np.asarray(scores[:, -i]),
                     np.asarray(
                         covars[
                             0:,
@@ -400,9 +401,13 @@ def ppcca(X, covars, q):
         M_1 = jnp.linalg.inv(W.T @ W + sig2 * jnp.diag(jnp.ones(q)))
 
         _x_ = M_1 @ (
-             W.T @ Xc.T + sig2 * (alpha @ covars)
+             #W.T @ Xc.T + sig2 * (alpha @ covars)
             # NOTE
             #W.T @ Xc.T + sig2 * covars
+            W.T @ Xc.T + sig2 * jnp.concatenate([
+                    jnp.zeros((q - q_constrained, N)),
+                    alpha @ covars,
+                    ], axis=0)
         )  # dim (q, N) or (q, 1) if we strictly follow
         # the formula but we have vectorized the computation over all the samples
         # thanks to the matrix product
@@ -412,7 +417,7 @@ def ppcca(X, covars, q):
 
         # M-Step
         #NOTE
-        alpha = (_x_ @ covars.T) @ jnp.linalg.inv(covars @ covars.T)  # estimation
+        alpha = (_x_[-q_constrained:] @ covars.T) @ jnp.linalg.inv(covars @ covars.T)  # estimation
         # of the regression coefficient, vectorized
         W = (Xc.T @ _x_.T) @ jnp.linalg.inv(sum_xx_)  # dim (p, q), estimation
         # of the loadings, same remark, it has been vectorized
