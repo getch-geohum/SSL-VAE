@@ -35,7 +35,7 @@ def _main():
 
     ## Load camp datasets
     data_dir = "../data/"
-    folds = ["Minawao_feb_2017", "Tza_oct_2016"]#"Minawao_june_2016"]#
+    folds = ["Minawao_feb_2017", "Tza_oct_2016", "Minawao_june_2016"]#
     inds = [folds.index(fold) for fold in folds] # index o each folder in the list for later use
     paths = [
         data_dir + f"/{folder}" for folder in folds
@@ -58,21 +58,20 @@ def _main():
         )
         for ind in inds
     ]
+
+    nb_samples = 500
+    nb_datasets = len(train_dataset)
+    nb_samples_by_dataset = nb_samples // nb_datasets
     images_1ch = []
     labels = []
     labels_ = []
     ndvi = []
-    for i in range((train_dataset[0].__len__())):
-        images_1ch.append(train_dataset[0].__getitem__(i)[0][:3, :, :].flatten().numpy())
-        labels.append(-1)#"Minawao_feb_2017")
-        labels_.append(np.zeros(images_1ch[0].shape))#"Minawao_june_2016")
-        ndvi.append(train_dataset[0].__getitem__(i)[0][4, :,:].flatten().numpy())
-
-    for i in range((train_dataset[1].__len__())):
-        images_1ch.append(train_dataset[1].__getitem__(i)[0][:3, :,:].flatten().numpy())
-        labels.append(1)#"Minawao_june_2016")
-        labels_.append(np.ones(images_1ch[0].shape))#"Minawao_june_2016")
-        ndvi.append(train_dataset[1].__getitem__(i)[0][4, :,:].flatten().numpy())
+    for i in range(nb_samples_by_dataset):
+        for d in range(nb_datasets):
+            images_1ch.append(train_dataset[d].__getitem__(i)[0][:3, :, :].flatten().numpy())
+            labels.append(d + 1)
+        #labels_.append(np.zeros(images_1ch[0].shape))
+        #ndvi.append(train_dataset[0].__getitem__(i)[0][4, :,:].flatten().numpy())
 
     x = np.stack(images_1ch, axis=0).astype(np.float32)
     rng = np.random.default_rng(12345)
@@ -80,13 +79,13 @@ def _main():
     x = x[:500]
     y = np.stack(labels, axis=0)
     #y_ = np.stack(labels_, axis=0)
-    y_ = np.stack(ndvi, axis=0)
+    #y_ = np.stack(ndvi, axis=0)
     rng = np.random.default_rng(12345)
     rng.shuffle(y)
     y = y[:500]
-    rng = np.random.default_rng(12345)
-    rng.shuffle(y_)
-    y_ = y_[:500]
+    #rng = np.random.default_rng(12345)
+    #rng.shuffle(y_)
+    #y_ = y_[:500]
 
     def plot_several(list_x, list_y):
         fig, axes = plt.subplots(len(list_x), len(list_x[0]))
@@ -138,14 +137,11 @@ def _main():
     #    axis=1
     # )
     # Or try covariables corresponding to the one hot encoding of the label
-    dim_constrained = 100
+    dim_constrained = 90
     covars = one_hot_encoder.fit_transform(y.reshape((-1, 1)))
     #covars = np.concatenate([covars for i in range(dim_constrained)], axis=-1)
     #covars = np.where(covars == 0, -10, 10)
     #covars = (np.repeat(y[:, None], repeats=2, axis=1)) * 10.
-
-    # NOTE: only part of the latent space should be linked to the NN, PCA,
-    # linear model
 
     alpha, sig2, x_embedded_ppcca, W, muhat = ppcca(x_scaled_pca, covars=covars, q=q)
     #print(alpha, sig2)
@@ -164,10 +160,10 @@ def _main():
         for d_c in range(1, dim_constrained + 1):
             if y[i] == 1:
                 #x_embedded_ppcca = x_embedded_ppcca.at[i, 0].set(-1)
-                x_embedded_ppcca = x_embedded_ppcca.at[i, -d_c].set(-5)
+                x_embedded_ppcca = x_embedded_ppcca.at[i, -d_c].set(0)
             else:
                 #x_embedded_ppcca = x_embedded_ppcca.at[i, 0].set(1)
-                x_embedded_ppcca = x_embedded_ppcca.at[i, -d_c].set(5)
+                x_embedded_ppcca = x_embedded_ppcca.at[i, -d_c].set(0)
     recs_mod = [pca_preproc.inverse_transform(W @ x_embedded_ppcca[i].T + muhat)[:,
         :65536 * 3]
             for i in range(nb_sample_plot)]
@@ -190,17 +186,14 @@ def _main():
     axes[0].set_ylabel("PC2")
     scatter = axes[1].scatter(x_embedded_ppca[:, 0], x_embedded_ppca[:, 1], c=y)  # , cmap="Set1")
     pca = PCA(n_components=2, random_state=random_state)
-    pca.fit(x_embedded_ppcca[:, :-dim_constrained])
-    x_embedded_ppcca_red = pca.transform(x_embedded_ppcca[:, :-dim_constrained])
+    pca.fit(x_embedded_ppcca_ori[:, :-dim_constrained])
+    x_embedded_ppcca_red = pca.transform(x_embedded_ppcca_ori[:, :-dim_constrained])
     scatter = axes[2].scatter(
         x_embedded_ppcca_red[:, 0], x_embedded_ppcca_red[:, 1], c=y
     )  # , cmap="Set1")
-    scatter = axes[3].scatter(
-         np.zeros(len(x_embedded_ppcca[:, 0])),x_embedded_ppcca[:, 0], c=y
-    )  # , cmap="Set1")
     pca = PCA(n_components=2, random_state=random_state)
-    pca.fit(x_embedded_ppcca)
-    x_embedded_ppcca_red = pca.transform(x_embedded_ppcca)
+    pca.fit(x_embedded_ppcca_ori)
+    x_embedded_ppcca_red = pca.transform(x_embedded_ppcca_ori)
     scatter = axes[4].scatter(
         x_embedded_ppcca_red[:, 0], x_embedded_ppcca_red[:, 1], c=y
     )  # , cmap="Set1")
@@ -370,7 +363,7 @@ def ppcca(X, covars, q):
     W = temp_vec[:, :q]  # init proj matrix of dim (p, q)
 
     ## initialization of alpha
-    q_constrained = 100
+    q_constrained = 20
     if null_alpha:
         alpha = jnp.zeros((q_constrained, L + 1))
     else:
