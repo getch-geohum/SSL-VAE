@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 import torchvision
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, ConcatDataset
 from datasets import *
 from mvtec_dataset import MvtechTrainDataset, MvtechTestDataset
 from AE import SSAE
@@ -297,7 +297,7 @@ def load_model_parameters(model, file_name, dir1, device):
     return model
 
 
-def get_train_dataloader(args):
+def get_train_dataloader(args, return_dataset=False):
     # print(f'The histogram equalizaion is set to: {args.equalize}')
     # print(f'The ndvi treshold is set to: {args.ndvi_treshold}')
     print(f"the folders to load the data: {args.data}")
@@ -371,6 +371,8 @@ def get_train_dataloader(args):
 
     print(f"Final train dataset length: {len(train_dataset)}")
     if len(args.data) >= 2 or "all" in args.data:
+        if return_dataset:
+            return torch.utils.data.ConcatDataset(train_dataset)
         # train_dataloader = [
         #    DataLoader(
         #        train_dataset[i],
@@ -383,13 +385,15 @@ def get_train_dataloader(args):
         # ]
 
         # Merge the datasets into one dataloader with a Concatenator Dataset class
-        train_dataloader = torch.utils.data.DataLoader(
-            torch.utils.data.ConcatDataset(train_dataset),
+        train_dataloader = DataLoader(
+            ConcatDataset(train_dataset),
             batch_size=args.batch_size,
             shuffle=True,
             num_workers=12,
         )
     else:
+        if return_dataset:
+            return train_dataset
         train_dataloader = DataLoader(
             train_dataset,
             batch_size=args.batch_size,
@@ -401,7 +405,9 @@ def get_train_dataloader(args):
     return train_dataloader
 
 
-def get_test_dataloader(args, fake_dataset_size=None):  # categ=None is added
+def get_test_dataloader(
+    args, fake_dataset_size=None, return_dataset=False
+):  # categ=None is added
     print(f"The test dataset could be loaded from: {args.data}")
     if os.path.exists(args.data_dir):
         if args.dataset == "camp":
@@ -475,30 +481,35 @@ def get_test_dataloader(args, fake_dataset_size=None):  # categ=None is added
     else:
         raise RuntimeError("No / Wrong file folder provided")
     print(f"Final test dataset lengt: {len(test_dataset)}")
+
     if len(args.data) >= 2 or "all" in args.data:  # 'all':
-        # test_dataloader = [
-        #    DataLoader(
-        #        test_dataset[i],
-        #        batch_size=args.batch_size_test,
-        #        num_workers=12,
-        #        drop_last=True,
-        #    )
-        #    for i in range(len(test_dataset))
-        # ]
-        # Merge the datasets into one dataloader with a Concatenator Dataset class
-        test_dataloader = torch.utils.data.DataLoader(
-            torch.utils.data.ConcatDataset(test_dataset),
-            batch_size=args.batch_size,
-            shuffle=True,
-            num_workers=12,
-        )
+        if return_dataset:
+            return torch.utils.data.ConcatDataset(test_dataset)
+            # test_dataloader = [
+            #    DataLoader(
+            #        test_dataset[i],
+            #        batch_size=args.batch_size_test,
+            #        num_workers=12,
+            #        drop_last=True,
+            #    )
+            #    for i in range(len(test_dataset))
+            # ]
+            # Merge the datasets into one dataloader with a Concatenator Dataset class
+            test_dataloader = DataLoader(
+                ConcatDataset(test_dataset),
+                batch_size=args.batch_size,
+                shuffle=True,
+                num_workers=12,
+            )
     else:
+        if return_dataset:
+            return test_dataset
         test_dataloader = DataLoader(
             test_dataset,
             batch_size=args.batch_size_test,
             num_workers=12,
             drop_last=True,
-        )  #
+        )
 
     return test_dataloader
 
