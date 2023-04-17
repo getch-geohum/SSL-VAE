@@ -371,17 +371,24 @@ def get_train_dataloader(args):
 
     print(f"Final train dataset length: {len(train_dataset)}")
     if len(args.data) >= 2 or "all" in args.data:
-        train_dataloader = [
-            DataLoader(
-                train_dataset[i],
-                batch_size=args.batch_size,
-                shuffle=True,
-                num_workers=12,
-                drop_last=True,
-            )
-            for i in range(len(train_dataset))
-        ]
+        # train_dataloader = [
+        #    DataLoader(
+        #        train_dataset[i],
+        #        batch_size=args.batch_size,
+        #        shuffle=True,
+        #        num_workers=12,
+        #        drop_last=True,
+        #    )
+        #    for i in range(len(train_dataset))
+        # ]
 
+        # Merge the datasets into one dataloader with a Concatenator Dataset class
+        train_dataloader = torch.utils.data.DataLoader(
+            torch.utils.data.ConcatDataset(train_dataset),
+            batch_size=args.batch_size,
+            shuffle=True,
+            num_workers=12,
+        )
     else:
         train_dataloader = DataLoader(
             train_dataset,
@@ -469,15 +476,22 @@ def get_test_dataloader(args, fake_dataset_size=None):  # categ=None is added
         raise RuntimeError("No / Wrong file folder provided")
     print(f"Final test dataset lengt: {len(test_dataset)}")
     if len(args.data) >= 2 or "all" in args.data:  # 'all':
-        test_dataloader = [
-            DataLoader(
-                test_dataset[i],
-                batch_size=args.batch_size_test,
-                num_workers=12,
-                drop_last=True,
-            )
-            for i in range(len(test_dataset))
-        ]
+        # test_dataloader = [
+        #    DataLoader(
+        #        test_dataset[i],
+        #        batch_size=args.batch_size_test,
+        #        num_workers=12,
+        #        drop_last=True,
+        #    )
+        #    for i in range(len(test_dataset))
+        # ]
+        # Merge the datasets into one dataloader with a Concatenator Dataset class
+        test_dataloader = torch.utils.data.DataLoader(
+            torch.utils.data.ConcatDataset(test_dataset),
+            batch_size=args.batch_size,
+            shuffle=True,
+            num_workers=12,
+        )
     else:
         test_dataloader = DataLoader(
             test_dataset,
