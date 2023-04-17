@@ -241,13 +241,15 @@ class TrainDataset(Dataset):
 
         if (self.fake_dataset_size is not None) and (
             self.fake_dataset_size <= len(self.img_dir)
-        ):  # self.img_dir trick to limit only for test datset size
-            # inds = list(range(min(len(self.lbl_dir), len(self.img_dir))))
+        ):
             inds = list(range(len(self.img_dir)))
             print(f"Length of indexes for sampling: {len(inds)}")
             sample = random.sample(inds, self.fake_dataset_size)
             self.img_dir = [self.img_dir[ind] for ind in sample]
-            # self.lbl_dir = [self.lbl_dir[ind] for ind in sample]
+            replace = True if len(self.img_dir) > len(self.lbl_dir) else False
+            self.lbl_dir = list(
+                np.random.choice(self.lbl_dir, len(self.img_dir), replace=replace)
+            )
 
             print(
                 "Number of train images after restriction",
@@ -282,11 +284,11 @@ class TrainDataset(Dataset):
                 f"image lenegth: {len(self.image_array)}, mask length: {len(self.mask_array)}"
             )
             print(f"length of masks: {len(self.mask_array[0])}")
-        elif dif < 0:
-            added_img = [random.choice(self.image_array) for i in range(abs(dif))]
-            self.image_array = self.image_array + added_img
-        else:
-            print("Images and maks have equal length")
+        # elif dif < 0:
+        #    added_img = [random.choice(self.image_array) for i in range(abs(dif))]
+        #    self.image_array = self.image_array + added_img
+        # else:
+        #    print("Images and maks have equal length")
 
         masked_a = [data[0] for data in self.mask_array]
         masked_l = [data[1] for data in self.mask_array]
