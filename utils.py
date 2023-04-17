@@ -24,23 +24,39 @@ matplotlib.use("Agg")
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--model", help="ssae or ssvae", type=str, default="ssae", required=True
+        "--model",
+        help="ssae or ssvae",
+        type=str,
+        default="ssae",
+        required=True,
     )
     parser.add_argument("--params_id", default=100)
     parser.add_argument(
-        "--img_size", help="The saptial size of the input image", default=256, type=int
+        "--img_size",
+        help="The saptial size of the input image",
+        default=256,
+        type=int,
     )
     parser.add_argument("--batch_size", default=16, type=int)
     parser.add_argument("--batch_size_test", default=8, type=int)
     parser.add_argument("--num_epochs", default=1000, type=int)
     parser.add_argument(
-        "--latent_img_size", help="Spatial size of encoded image", default=8, type=int
+        "--latent_img_size",
+        help="Spatial size of encoded image",
+        default=8,
+        type=int,
     )
     parser.add_argument(
-        "--fake_dataset_size", help="samples for runnung test", default=30, type=int
+        "--fake_dataset_size",
+        help="samples for runnung test",
+        default=30,
+        type=int,
     )
     parser.add_argument(
-        "--z_dim", help="Number of final encoder channels", default=512, type=int
+        "--z_dim",
+        help="Number of final encoder channels",
+        default=512,
+        type=int,
     )
     parser.add_argument("--lr", default=1e-4, type=float)
     parser.add_argument(
@@ -94,7 +110,10 @@ def parse_args():
         type=float,
     )
     parser.add_argument(
-        "--min_beta", help="Base beta value for kld annealing", default=0.0, type=float
+        "--min_beta",
+        help="Base beta value for kld annealing",
+        default=0.0,
+        type=float,
     )
 
     parser.add_argument(
@@ -343,7 +362,9 @@ def get_train_dataloader(args):
         else:
             print("MVtECH dataset will be loaded for training")
             train_dataset = MvtechTrainDataset(
-                root=args.data_dir, texture=args.texture, with_prob=args.with_prob
+                root=args.data_dir,
+                texture=args.texture,
+                with_prob=args.with_prob,
             )
     else:
         raise RuntimeError("No / Wrong file folder provided")
