@@ -9,6 +9,7 @@ from mvtec_dataset import MvtechTrainDataset, MvtechTestDataset
 from AE import SSAE
 from ssvae import SSVAE
 from c_ssvae import SS_CVAE
+from dis_ssvae import DIS_SSVAE
 from mvtec_models import SS_AEmvtec, SS_CVAEmvtec
 import time
 import json
@@ -240,6 +241,18 @@ def load_ssae(args):
             img_size=args.img_size,
             nb_channels=args.nb_channels,
         )
+    if args.model == "dis_ssvae":
+        print(
+            f"with specified model param { args.model}: self-supervised"
+            "variational autoencoder with disentanglement will be loaded"
+        )
+        model = DIS_SSVAE(
+            latent_img_size=args.latent_img_size,
+            z_dim=args.z_dim,
+            img_size=args.img_size,
+            nb_channels=args.nb_channels,
+            nb_dataset=len(args.data),
+        )
     if args.model == "ss_cvae":
         print(
             f"with specified model param {args.model} without kld annealing: self-supervised conditional variational autoencoder will be loaded"
@@ -302,6 +315,7 @@ def get_train_dataloader(args):
                         b_treshold=params[folds[ind]]["brightness_treshold"],
                         with_prob=args.with_prob,
                         with_condition=args.with_condition,
+                        dataset_label=ind,
                     )
                     for ind in inds
                 ]
@@ -324,6 +338,7 @@ def get_train_dataloader(args):
                     b_treshold=params[args.data[0]]["brightness_treshold"],
                     with_prob=args.with_prob,
                     with_codition=args.with_condition,
+                    dataset_label=0,
                 )
         else:
             print("MVtECH dataset will be loaded for training")
@@ -395,6 +410,7 @@ def get_test_dataloader(args, fake_dataset_size=None):  # categ=None is added
                         b_treshold=params[folds[ind]]["brightness_treshold"],
                         with_mask=args.with_mask,
                         with_condition=args.with_condition,
+                        dataset_label=ind,
                     )
                     for ind in inds
                 ]
@@ -417,6 +433,7 @@ def get_test_dataloader(args, fake_dataset_size=None):  # categ=None is added
                     b_treshold=params[args.data[0]]["brightness_treshold"],
                     with_mask=args.with_mask,
                     with_condition=args.with_condition,
+                    dataset_label=0,
                 )
             print(f"Camp test datset size: {len(test_dataset)}")
         else:
@@ -500,21 +517,3 @@ def print_loss_logs(f_name, out_dir, loss_dict, epoch, exp_name):
         axis.legend()
         fig.savefig(os.path.join(out_dir, f"{exp_name}_loss_{epoch + 1}.png"))
         plt.close(fig)
-
-
-def datasets_to_labels(dataset_name):
-    """
-    returns an arbitrary fixed label for each dataset.
-    Need to upload the list if new dataset is added.
-    """
-    dataset_labels = {
-        "Deghale_Apr_2017": 1,
-        "Minawao_feb_2017": 2,
-        "Tza_oct_2016": 3,
-        "Kule_tirkidi_jun_2018": 4,
-        "Minawao_june_2016": 5,
-        "Zamzam_april_2022": 6,
-        "Kule_tirkidi_marc_2017": 7,
-        "Nguyen_march_2017": 8,
-    }
-    return dataset_labels[dataset_name]
