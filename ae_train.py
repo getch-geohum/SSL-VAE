@@ -7,13 +7,15 @@ import time
 from torchvision import transforms, utils
 import torch
 from torch import nn
+from torch.utils.data import DataLoader, ConcatDataset
+import matplotlib.pyplot as plt
 
-import matplotlib
-
-matplotlib.use("Agg")
+# matplotlib.use("Agg")
 import sys
 import random
 from utils import *
+from sklearn.manifold import TSNE
+from sklearn.decomposition import PCA
 
 
 def train(model, train_loader, device, optimizer, betas, c_epoch, txtt, scheduler=None):
@@ -123,8 +125,24 @@ def main(args):
     model = load_ssae(args)
     model.to(device)
 
-    train_dataloader = get_train_dataloader(args)
-    test_dataloader = get_test_dataloader(args, fake_dataset_size=16)
+    # We get the train_dataset first and not directly the dataloaders for
+    # further processing
+    train_dataset = get_train_dataloader(args, return_dataset=True)
+    test_dataset = get_test_dataloader(args, fake_dataset_size=16, return_dataset=True)
+    if type(train_dataset) is ConcatDataset or type(train_dataset) is Dataset:
+        train_dataloader = DataLoader(
+            train_dataset,
+            batch_size=args.batch_size,
+            shuffle=True,
+            num_workers=12,
+        )
+    if type(test_dataset) is ConcatDataset or type(test_dataset) is Dataset:
+        test_dataloader = DataLoader(
+            test_dataset,
+            batch_size=args.batch_size_test,
+            num_workers=12,
+            drop_last=True,
+        )
 
     nb_channels = args.nb_channels
 
@@ -232,9 +250,8 @@ def main(args):
             24,
             29,
             49,
-        ]:  # check this part
+        ]:
             img_train = utils.make_grid(
-                # tensor_img_to_01(
                 torch.cat(
                     (
                         torch.flip(input_mb[:, :3, :, :], dims=(1,)),
@@ -246,7 +263,7 @@ def main(args):
             )
             utils.save_image(
                 img_train, f"{res_dir}/{args.exp}_img_train_{epoch + 1}.png"
-            )  # f"torch_results/{args.exp}_img_train_{epoch + 1}.png"
+            )
             model.eval()
             input_test_mb, recon_test_mb, gts = eval(
                 model=model,
@@ -254,10 +271,20 @@ def main(args):
                 device=device,
                 with_mask=args.with_mask,
             )
-
+            model.to("cpu")  # move to CPU for processing the whole dataset
+            mu_train = model.encoder(
+                torch.stack([train_dataset[i][0] for i in range(200)], axis=0)
+            )[0][:, : model.z_dim]
+            mu_train = torch.reshape(mu_train, (mu_train.shape[0], -1)).detach().numpy()
+            mu_test = model.encoder(
+                torch.stack([test_dataset[i][0] for i in range(10)], axis=0)
+            )[0][:, : model.z_dim]
+            tsne = PCA(n_components=2)
+            mu_train_embedded = tsne.fit_transform(mu_train)
+            plt.scatter(mu_train_embedded[:, 0], mu_train_embedded[:, 1])
+            plt.show()
+            model.to(device)  # move back to the training device
             model.train()
-            # print(input_test_mb.shape, 'input test shape')
-            # print(recon_test_mb.shape,'reconstructed test image shape')
 
             img_test = utils.make_grid(
                 torch.cat(
@@ -269,9 +296,7 @@ def main(args):
                 ),
                 nrow=batch_size_test,
             )
-            utils.save_image(
-                img_test, f"{res_dir}/{args.exp}_img_test_{epoch + 1}.png"
-            )  # f"torch_results/{args.exp}_img_test_{epoch + 1}.png"
+            utils.save_image(img_test, f"{res_dir}/{args.exp}_img_test_{epoch + 1}.png")
     step_metric.close()
 
 
