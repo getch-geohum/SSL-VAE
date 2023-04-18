@@ -18,7 +18,7 @@ import re
 import argparse
 import matplotlib
 
-matplotlib.use("Agg")
+# matplotlib.use("Agg")
 
 
 def parse_args():

@@ -272,16 +272,52 @@ def main(args):
                 with_mask=args.with_mask,
             )
             model.to("cpu")  # move to CPU for processing the whole dataset
+
+            idx_train_plot = np.random.choice(
+                np.arange(len(train_dataset)), 200, replace=False
+            )
             mu_train = model.encoder(
-                torch.stack([train_dataset[i][0] for i in range(200)], axis=0)
+                torch.stack([train_dataset[i][0] for i in idx_train_plot], axis=0)
             )[0][:, : model.z_dim]
+            mu_train_cons = mu_train[:, : model.z_dim_constrained, :, :]
+            mu_train_free = mu_train[:, model.z_dim_constrained :, :, :]
+            mu_train_cons = (
+                torch.reshape(mu_train_cons, (mu_train_cons.shape[0], -1))
+                .detach()
+                .numpy()
+            )
+            mu_train_free = (
+                torch.reshape(mu_train_free, (mu_train_free.shape[0], -1))
+                .detach()
+                .numpy()
+            )
             mu_train = torch.reshape(mu_train, (mu_train.shape[0], -1)).detach().numpy()
+            mu_train_labels = (
+                torch.stack([train_dataset[i][-1] for i in idx_train_plot], axis=0)
+                .detach()
+                .numpy()
+            )
             mu_test = model.encoder(
                 torch.stack([test_dataset[i][0] for i in range(10)], axis=0)
             )[0][:, : model.z_dim]
-            tsne = PCA(n_components=2)
+            tsne = TSNE(n_components=2)
             mu_train_embedded = tsne.fit_transform(mu_train)
-            plt.scatter(mu_train_embedded[:, 0], mu_train_embedded[:, 1])
+            mu_train_cons_embedded = tsne.fit_transform(mu_train_cons)
+            mu_train_free_embedded = tsne.fit_transform(mu_train_free)
+            fig, axes = plt.subplots(1, 3)
+            axes[0].scatter(
+                mu_train_embedded[:, 0], mu_train_embedded[:, 1], c=mu_train_labels
+            )
+            axes[1].scatter(
+                mu_train_cons_embedded[:, 0],
+                mu_train_cons_embedded[:, 1],
+                c=mu_train_labels,
+            )
+            axes[2].scatter(
+                mu_train_free_embedded[:, 0],
+                mu_train_free_embedded[:, 1],
+                c=mu_train_labels,
+            )
             plt.show()
             model.to(device)  # move back to the training device
             model.train()

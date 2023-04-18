@@ -12,7 +12,7 @@ from torchvision import transforms
 
 import matplotlib
 
-matplotlib.use("TkAgg")
+# matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 
 from mlp import MLP
@@ -106,7 +106,11 @@ class DIS_SSVAE(nn.Module):
 
         self.nb_dataset = nb_dataset
 
-        self.dis_mlp = MLP(self.z_dim // 4 * 32 * 32, [256, 128, 32], self.nb_dataset)
+        self.z_dim_constrained = 126
+
+        self.dis_mlp = MLP(
+            self.z_dim_constrained * self.latent_img_size**2, [128], self.nb_dataset
+        )
 
     def encoder(self, x):
         x = self.conv_encoder(x)
@@ -162,7 +166,8 @@ class DIS_SSVAE(nn.Module):
 
     def kld(self):  # kld loss without mask
         return 0.5 * torch.sum(
-            1 + self.logvar - self.mu.pow(2) - self.logvar.exp(), dim=(1)
+            1 + self.logvar[:, :] - self.mu[:, :].pow(2) - self.logvar[:, :].exp(),
+            dim=(1),
         )
 
     def tarctanh(self, x):
@@ -209,22 +214,25 @@ class DIS_SSVAE(nn.Module):
         )  # just to follow Boers work
         kld = torch.mean(self.kld())
 
-        beta = 0.0001
+        # Can we imagine different beta for the constrained and unconstrained
+        # dim ?
+        beta = 0.1  # 0.0001
         L = rec_term + beta * kld
 
         ### DISENTANGLEMENT MODULE
+        # NOTE y a til une maj des poids de l'encodeur ici ?
         dis_loss = nn.CrossEntropyLoss(reduction="mean")
         dl = dis_loss(
             self.dis_mlp(
                 torch.reshape(
-                    self.mu[:, : self.mu.shape[1] // 4, :, :],
+                    self.mu[:, : self.z_dim_constrained, :, :],
                     (self.mu.shape[0], -1),
                 )
             ),
             dataset_lbl,
         )
 
-        loss = L - dl
+        loss = L - 10 * dl
 
         loss_dict = {
             "loss": loss,
