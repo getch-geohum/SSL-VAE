@@ -271,6 +271,18 @@ def main(args):
                 device=device,
                 with_mask=args.with_mask,
             )
+            img_test = utils.make_grid(
+                torch.cat(
+                    (
+                        torch.flip(input_test_mb[:, :3, :, :], dims=(1,)),
+                        torch.flip(recon_test_mb[:, :3, :, :], dims=(1,)),
+                    ),
+                    dim=0,
+                ),
+                nrow=batch_size_test,
+            )
+            utils.save_image(img_test, f"{res_dir}/{args.exp}_img_test_{epoch + 1}.png")
+
             model.to("cpu")  # move to CPU for processing the whole dataset
 
             idx_train_plot = np.random.choice(
@@ -278,7 +290,8 @@ def main(args):
             )
             mu_train = model.encoder(
                 torch.stack([train_dataset[i][0] for i in idx_train_plot], axis=0)
-            )[0][:, : model.z_dim]
+            )[0]
+            # Plot the latent rv, all, constrained and unconstrained
             mu_train_cons = mu_train[:, : model.z_dim_constrained, :, :]
             mu_train_free = mu_train[:, model.z_dim_constrained :, :, :]
             mu_train_cons = (
@@ -297,42 +310,102 @@ def main(args):
                 .detach()
                 .numpy()
             )
+
+            idx_test_plot = np.random.choice(
+                np.arange(len(test_dataset)), len(test_dataset), replace=False
+            )
             mu_test = model.encoder(
-                torch.stack([test_dataset[i][0] for i in range(10)], axis=0)
-            )[0][:, : model.z_dim]
-            tsne = TSNE(n_components=2)
+                torch.stack([test_dataset[i][0] for i in idx_test_plot], axis=0)
+            )[0]
+            mu_test_cons = mu_test[:, : model.z_dim_constrained, :, :]
+            mu_test_free = mu_test[:, model.z_dim_constrained :, :, :]
+            mu_test_cons = (
+                torch.reshape(mu_test_cons, (mu_test_cons.shape[0], -1))
+                .detach()
+                .numpy()
+            )
+            mu_test_free = (
+                torch.reshape(mu_test_free, (mu_test_free.shape[0], -1))
+                .detach()
+                .numpy()
+            )
+            mu_test = torch.reshape(mu_test, (mu_test.shape[0], -1)).detach().numpy()
+            mu_test_labels = (
+                torch.stack([test_dataset[i][-1] for i in idx_test_plot], axis=0)
+                .detach()
+                .numpy()
+                + model.nb_dataset  # current trick to differentiate
+                # train from test
+            )
+
+            tsne = PCA(n_components=2)  # PCA instead of TSNE to go fast
             mu_train_embedded = tsne.fit_transform(mu_train)
+            mu_test_embedded = tsne.transform(mu_test)
             mu_train_cons_embedded = tsne.fit_transform(mu_train_cons)
+            mu_test_cons_embedded = tsne.transform(mu_test_cons)
             mu_train_free_embedded = tsne.fit_transform(mu_train_free)
+            mu_test_free_embedded = tsne.transform(mu_test_free)
+
             fig, axes = plt.subplots(1, 3)
             axes[0].scatter(
-                mu_train_embedded[:, 0], mu_train_embedded[:, 1], c=mu_train_labels
+                np.concatenate(
+                    [mu_train_embedded[:, 0], mu_test_embedded[:, 0]], axis=0
+                ),
+                np.concatenate(
+                    [mu_train_embedded[:, 1], mu_test_embedded[:, 1]], axis=0
+                ),
+                c=np.concatenate([mu_train_labels, mu_test_labels], axis=0),
             )
             axes[1].scatter(
-                mu_train_cons_embedded[:, 0],
-                mu_train_cons_embedded[:, 1],
-                c=mu_train_labels,
+                np.concatenate(
+                    [mu_train_cons_embedded[:, 0], mu_test_cons_embedded[:, 0]], axis=0
+                ),
+                np.concatenate(
+                    [mu_train_cons_embedded[:, 1], mu_test_cons_embedded[:, 1]], axis=0
+                ),
+                c=np.concatenate([mu_train_labels, mu_test_labels], axis=0),
             )
             axes[2].scatter(
-                mu_train_free_embedded[:, 0],
-                mu_train_free_embedded[:, 1],
-                c=mu_train_labels,
+                np.concatenate(
+                    [mu_train_free_embedded[:, 0], mu_test_free_embedded[:, 0]], axis=0
+                ),
+                np.concatenate(
+                    [mu_train_free_embedded[:, 1], mu_test_free_embedded[:, 1]], axis=0
+                ),
+                c=np.concatenate([mu_train_labels, mu_test_labels], axis=0),
             )
             plt.show()
-            model.to(device)  # move back to the training device
-            model.train()
 
-            img_test = utils.make_grid(
+            idx_train_modified = np.random.choice(
+                np.arange(len(train_dataset)), 10, replace=False
+            )
+            ori_img = torch.stack(
+                [train_dataset[i][0] for i in idx_train_modified], axis=0
+            )
+            mu_train_modified = model.encoder(
+                torch.stack([train_dataset[i][0] for i in idx_train_modified], axis=0)
+            )[0]
+            # Plot the latent rv, all, constrained and unconstrained
+            mu_train_modified[:, : model.z_dim_constrained] = 0
+            rec_modified = model.mean_from_lambda(model.decoder(mu_train_modified))
+
+            img_train = utils.make_grid(
                 torch.cat(
                     (
-                        torch.flip(input_test_mb[:, :3, :, :], dims=(1,)),
-                        torch.flip(recon_test_mb[:, :3, :, :], dims=(1,)),
+                        torch.flip(ori_img[:, :3, :, :], dims=(1,)),
+                        torch.flip(rec_modified[:, :3, :, :], dims=(1,)),
                     ),
                     dim=0,
                 ),
-                nrow=batch_size_test,
+                nrow=10,
             )
-            utils.save_image(img_test, f"{res_dir}/{args.exp}_img_test_{epoch + 1}.png")
+            utils.save_image(
+                img_train, f"{res_dir}/{args.exp}_img_train_modified_{epoch + 1}.png"
+            )
+
+            model.to(device)  # move back to the training device
+            model.train()
+
     step_metric.close()
 
 

@@ -106,7 +106,7 @@ class DIS_SSVAE(nn.Module):
 
         self.nb_dataset = nb_dataset
 
-        self.z_dim_constrained = 126
+        self.z_dim_constrained = 14
 
         self.dis_mlp = MLP(
             self.z_dim_constrained * self.latent_img_size**2, [128], self.nb_dataset
@@ -166,7 +166,10 @@ class DIS_SSVAE(nn.Module):
 
     def kld(self):  # kld loss without mask
         return 0.5 * torch.sum(
-            1 + self.logvar[:, :] - self.mu[:, :].pow(2) - self.logvar[:, :].exp(),
+            -1
+            - self.logvar[:, self.z_dim_constrained :]
+            + self.mu[:, self.z_dim_constrained :].pow(2)
+            + self.logvar[:, self.z_dim_constrained :].exp(),
             dim=(1),
         )
 
@@ -216,8 +219,8 @@ class DIS_SSVAE(nn.Module):
 
         # Can we imagine different beta for the constrained and unconstrained
         # dim ?
-        beta = 0.1  # 0.0001
-        L = rec_term + beta * kld
+        beta = 1  # 0.0001
+        L = rec_term - beta * kld
 
         ### DISENTANGLEMENT MODULE
         # NOTE y a til une maj des poids de l'encodeur ici ?
