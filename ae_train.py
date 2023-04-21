@@ -8,6 +8,7 @@ from torchvision import transforms, utils
 import torch
 from torch import nn
 from torch.utils.data import DataLoader, ConcatDataset
+import matplotlib
 import matplotlib.pyplot as plt
 
 # matplotlib.use("Agg")
@@ -289,11 +290,11 @@ def main(args):
                 np.arange(len(train_dataset)), 200, replace=False
             )
             mu_train = model.encoder(
-                torch.stack([train_dataset[i][0] for i in idx_train_plot], axis=0)
+                torch.stack([train_dataset[i][1] for i in idx_train_plot], axis=0)
             )[0]
             # Plot the latent rv, all, constrained and unconstrained
-            mu_train_cons = mu_train[:, : model.z_dim_constrained, :, :]
-            mu_train_free = mu_train[:, model.z_dim_constrained :, :, :]
+            mu_train_cons = mu_train[:, : model.z_dim_constrained]
+            mu_train_free = mu_train[:, model.z_dim_constrained :]
             mu_train_cons = (
                 torch.reshape(mu_train_cons, (mu_train_cons.shape[0], -1))
                 .detach()
@@ -317,8 +318,8 @@ def main(args):
             mu_test = model.encoder(
                 torch.stack([test_dataset[i][0] for i in idx_test_plot], axis=0)
             )[0]
-            mu_test_cons = mu_test[:, : model.z_dim_constrained, :, :]
-            mu_test_free = mu_test[:, model.z_dim_constrained :, :, :]
+            mu_test_cons = mu_test[:, : model.z_dim_constrained]
+            mu_test_free = mu_test[:, model.z_dim_constrained :]
             mu_test_cons = (
                 torch.reshape(mu_test_cons, (mu_test_cons.shape[0], -1))
                 .detach()
@@ -348,45 +349,59 @@ def main(args):
 
             fig, axes = plt.subplots(1, 3)
             axes[0].scatter(
-                np.concatenate(
-                    [mu_train_embedded[:, 0], mu_test_embedded[:, 0]], axis=0
-                ),
-                np.concatenate(
-                    [mu_train_embedded[:, 1], mu_test_embedded[:, 1]], axis=0
-                ),
-                c=np.concatenate([mu_train_labels, mu_test_labels], axis=0),
+                mu_train_embedded[:, 0],
+                mu_train_embedded[:, 1],
+                c=mu_train_labels
+                # np.concatenate(
+                #    [mu_train_embedded[:, 0], mu_test_embedded[:, 0]], axis=0
+                # ),
+                # np.concatenate(
+                #    [mu_train_embedded[:, 1], mu_test_embedded[:, 1]], axis=0
+                # ),
+                # c=np.concatenate([mu_train_labels, mu_test_labels], axis=0),
             )
             axes[1].scatter(
-                np.concatenate(
-                    [mu_train_cons_embedded[:, 0], mu_test_cons_embedded[:, 0]], axis=0
-                ),
-                np.concatenate(
-                    [mu_train_cons_embedded[:, 1], mu_test_cons_embedded[:, 1]], axis=0
-                ),
-                c=np.concatenate([mu_train_labels, mu_test_labels], axis=0),
+                mu_train_cons_embedded[:, 0],
+                mu_train_cons_embedded[:, 1],
+                c=mu_train_labels
+                # np.concatenate(
+                #    [mu_train_cons_embedded[:, 0], mu_test_cons_embedded[:, 0]], axis=0
+                # ),
+                # np.concatenate(
+                #    [mu_train_cons_embedded[:, 1], mu_test_cons_embedded[:, 1]], axis=0
+                # ),
+                # c=np.concatenate([mu_train_labels, mu_test_labels], axis=0),
             )
             axes[2].scatter(
-                np.concatenate(
-                    [mu_train_free_embedded[:, 0], mu_test_free_embedded[:, 0]], axis=0
-                ),
-                np.concatenate(
-                    [mu_train_free_embedded[:, 1], mu_test_free_embedded[:, 1]], axis=0
-                ),
-                c=np.concatenate([mu_train_labels, mu_test_labels], axis=0),
+                mu_train_free_embedded[:, 0],
+                mu_train_free_embedded[:, 1],
+                c=mu_train_labels
+                # np.concatenate(
+                #    [mu_train_free_embedded[:, 0], mu_test_free_embedded[:, 0]], axis=0
+                # ),
+                # np.concatenate(
+                #    [mu_train_free_embedded[:, 1], mu_test_free_embedded[:, 1]], axis=0
+                # ),
+                # c=np.concatenate([mu_train_labels, mu_test_labels], axis=0),
             )
-            plt.show()
+            # plt.show()
 
             idx_train_modified = np.random.choice(
                 np.arange(len(train_dataset)), 10, replace=False
             )
             ori_img = torch.stack(
-                [train_dataset[i][0] for i in idx_train_modified], axis=0
+                [train_dataset[i][1] for i in idx_train_modified], axis=0
             )
             mu_train_modified = model.encoder(
-                torch.stack([train_dataset[i][0] for i in idx_train_modified], axis=0)
+                torch.stack([train_dataset[i][1] for i in idx_train_modified], axis=0)
             )[0]
             # Plot the latent rv, all, constrained and unconstrained
-            mu_train_modified[:, : model.z_dim_constrained] = 0
+            # mu_train_modified[:, : model.z_dim_constrained] = torch.randn(
+            #    mu_train_modified[:, : model.z_dim_constrained].shape) * 0
+            for d in range(2):
+                mu_train_modified[:, d * 10 : (d + 1) * 10] = torch.mean(
+                    mu_train_modified[:, d * 10 : (d + 1) * 10], axis=1, keepdims=True
+                )
             rec_modified = model.mean_from_lambda(model.decoder(mu_train_modified))
 
             img_train = utils.make_grid(

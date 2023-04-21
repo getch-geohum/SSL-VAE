@@ -68,12 +68,17 @@ class DIS_SSVAE(nn.Module):
             *self.encoder_layers,
         )
         self.final_encoder = nn.Sequential(
+            #    nn.Linear(self.max_depth_conv * self.latent_img_size ** 2,
+            #        self.z_dim * 2)
             nn.Conv2d(
                 self.max_depth_conv, self.z_dim * 2, kernel_size=1, stride=1, padding=0
             )
         )
 
         self.initial_decoder = nn.Sequential(
+            # nn.Linear(self.z_dim, self.max_depth_conv * self.latent_img_size **
+            #    2),
+            # nn.BatchNorm1d(self.max_depth_conv * self.latent_img_size ** 2),
             nn.ConvTranspose2d(
                 self.z_dim, self.max_depth_conv, kernel_size=1, stride=1, padding=0
             ),
@@ -105,15 +110,40 @@ class DIS_SSVAE(nn.Module):
         self.conv_decoder = nn.Sequential(*self.decoder_layers)
 
         self.nb_dataset = nb_dataset
+        self.z_dim_constrained = 10
 
-        self.z_dim_constrained = 14
+        # self.dis_mlp = MLP(
+        #    self.z_dim_constrained * self.latent_img_size**2, [128], self.nb_dataset
+        # )
+        # self.dis_cnn = nn.Sequential(
+        #    nn.Linear(self.z_dim_constrained, self.z_dim_constrained *
+        #        self.latent_img_size ** 2),
+        #    #nn.BatchNorm1d(self.z_dim_constrained * self.latent_img_size ** 2),
+        #    #nn.ReLU(),
+        #    nn.Unflatten(1, (self.z_dim_constrained, self.latent_img_size,
+        #        latent_img_size)),
+        #    nn.ConvTranspose2d(self.z_dim_constrained, self.z_dim_constrained, 4, 2, 1),
+        #    nn.BatchNorm2d(self.z_dim_constrained),
+        #    nn.ReLU(),
+        #    nn.ConvTranspose2d(self.z_dim_constrained, self.z_dim_constrained, 4, 2, 1),
+        #    nn.BatchNorm2d(self.z_dim_constrained),
+        #    nn.ReLU(),
+        #    nn.ConvTranspose2d(self.z_dim_constrained, self.z_dim_constrained, 4, 2, 1),
+        #    nn.BatchNorm2d(self.z_dim_constrained),
+        #    nn.ReLU(),
+        #    nn.ConvTranspose2d(self.z_dim_constrained, 4, 4, 2, 1),
+        #    #nn.BatchNorm2d(self.z_dim_constrained),
+        #    #nn.ReLU(),
+        #    #nn.ConvTranspose2d(self.z_dim_constrained, 1, 4, 2, 1),
+        #    #nn.BatchNorm2d(self.z_dim_constrained),
+        #    #nn.ReLU(),
+        #    )
 
-        self.dis_mlp = MLP(
-            self.z_dim_constrained * self.latent_img_size**2, [128], self.nb_dataset
-        )
+        self.max_pooling_2d = torch.nn.MaxPool2d(4, 2, 1)
 
     def encoder(self, x):
         x = self.conv_encoder(x)
+        # x = x.view(x.shape[0], -1) # NOTE that this is needed if Linear latent space
         x = self.final_encoder(x)
         return x[:, : self.z_dim], x[:, self.z_dim :]
 
@@ -127,6 +157,9 @@ class DIS_SSVAE(nn.Module):
 
     def decoder(self, z):
         z = self.initial_decoder(z)
+        # z = z.view(z.shape[0], self.max_depth_conv, self.latent_img_size,
+        #        self.latent_img_size) # NOTE that this is needed if Linear
+        #    # latent space
         x = self.conv_decoder(z)
         x = nn.Sigmoid()(x)
         return x
@@ -136,7 +169,7 @@ class DIS_SSVAE(nn.Module):
         z = self.reparameterize(mu, logvar)
         self.mu = mu
         self.logvar = logvar
-        return self.decoder(z), (mu, logvar)
+        return self.decoder(z), (self.mu, self.logvar)
 
     def xent_continuous_ber(self, recon_x, x, gamma=1):
         """p(x_i|z_i) a continuous bernoulli"""
@@ -149,7 +182,7 @@ class DIS_SSVAE(nn.Module):
             return torch.log((2 * self.tarctanh(1 - 2 * x)) / (1 - 2 * x) + eps)
 
         recon_x = gamma * recon_x  # like if we multiplied the lambda ?
-        return torch.sum(
+        return torch.mean(
             (
                 x * torch.log(recon_x + eps)
                 + (1 - x) * torch.log(1 - recon_x + eps)
@@ -164,12 +197,19 @@ class DIS_SSVAE(nn.Module):
         l = torch.where((l < 0.49) | (l > 0.51), l, 0.49 * torch.ones_like(l))
         return l / (2 * l - 1) + 1 / (2 * self.tarctanh(1 - 2 * l))
 
-    def kld(self):  # kld loss without mask
-        return 0.5 * torch.sum(
+    def kld(self, dataset_lbl):  # kld loss without mask
+        # start_dim = (dataset_lbl * self.z_dim_constrained).long()
+        # end_dim = ((dataset_lbl + 1) * self.z_dim_constrained).long()
+        # seems hard to index with batched slice
+        b, c, h, w = self.logvar.shape
+        logvar = self.logvar.reshape((b, self.nb_dataset, self.z_dim_constrained, h, w))
+        b, c, h, w = self.mu.shape
+        mu = self.mu.reshape((b, self.nb_dataset, self.z_dim_constrained, h, w))
+        return 0.5 * torch.mean(
             -1
-            - self.logvar[:, self.z_dim_constrained :]
-            + self.mu[:, self.z_dim_constrained :].pow(2)
-            + self.logvar[:, self.z_dim_constrained :].exp(),
+            - logvar[:, dataset_lbl]
+            + mu[:, dataset_lbl].pow(2)
+            + logvar[:, dataset_lbl].exp(),
             dim=(1),
         )
 
@@ -188,54 +228,63 @@ class DIS_SSVAE(nn.Module):
         # A beta coefficient that will be pixel wise and that will be bigger
         # for pixels of the mask which are very different between the original
         # and modified version of x
-        gamma = Mn  # self.beta + Mm * torch.abs(xm - x)
-        beta = Mn  # Mm * torch.abs(xm - x)
-        beta_inv = Mm
-        for i in range(self.nb_conv):
-            beta = nn.functional.max_pool2d(beta, 2)
-            beta_inv = nn.functional.max_pool2d(beta_inv, 2)
-        beta = torch.mean(beta, axis=1)[:, None]
-        beta_inv = torch.mean(beta_inv, axis=1)[:, None]
+        # gamma = Mn  # self.beta + Mm * torch.abs(xm - x)
+        # beta = Mn  # Mm * torch.abs(xm - x)
+        # beta_inv = Mm
+        # for i in range(self.nb_conv):
+        #    beta = nn.functional.max_pool2d(beta, 2)
+        #    beta_inv = nn.functional.max_pool2d(beta_inv, 2)
+        # beta = torch.mean(beta, axis=1)[:, None]
+        # beta_inv = torch.mean(beta_inv, axis=1)[:, None]
 
-        base = 256 * 256
-        lambda_ = 0.9
-        w_n = (
-            torch.sum(Mn[:, 0, :, :], dim=(1, 2)) / base
-        )  # [batch_n,] weight to balance contribution from unmodified region
-        w_m = (
-            torch.sum(Mm[:, 0, :, :], dim=(1, 2)) / base
-        )  # [batch_n,] weight to balance contribution from modified region
+        # base = 256 * 256
+        # lambda_ = 0.9
+        # w_n = (
+        #    torch.sum(Mn[:, 0, :, :], dim=(1, 2)) / base
+        # )  # [batch_n,] weight to balance contribution from unmodified region
+        # w_m = (
+        #    torch.sum(Mm[:, 0, :, :], dim=(1, 2)) / base
+        # )  # [batch_n,] weight to balance contribution from modified region
 
-        rec_normal = torch.mean(
-            torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mn), dim=(1, 2)) * w_n
+        # rec_normal = torch.mean(
+        #    torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mn), dim=(1, 2)) * w_n
+        # )
+        # rec_modified = torch.mean(
+        #    torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mm), dim=(1, 2)) * w_m
+        # )
+        # rec_term = (
+        #    lambda_ * rec_normal + (1 - lambda_) * rec_modified
+        # )  # just to follow Boers work
+
+        rec_term = torch.mean(
+            torch.mean(self.xent_continuous_ber(recon_x, x), dim=(1, 2))
         )
-        rec_modified = torch.mean(
-            torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mm), dim=(1, 2)) * w_m
-        )
-        rec_term = (
-            lambda_ * rec_normal + (1 - lambda_) * rec_modified
-        )  # just to follow Boers work
-        kld = torch.mean(self.kld())
+        kld = torch.mean(self.kld(dataset_lbl))
 
         # Can we imagine different beta for the constrained and unconstrained
         # dim ?
-        beta = 1  # 0.0001
+        beta = 0.0001
         L = rec_term - beta * kld
 
         ### DISENTANGLEMENT MODULE
         # NOTE y a til une maj des poids de l'encodeur ici ?
-        dis_loss = nn.CrossEntropyLoss(reduction="mean")
-        dl = dis_loss(
-            self.dis_mlp(
-                torch.reshape(
-                    self.mu[:, : self.z_dim_constrained, :, :],
-                    (self.mu.shape[0], -1),
-                )
-            ),
-            dataset_lbl,
-        )
+        dl = torch.zeros_like(kld)
+        # dis_loss = nn.MSELoss(reduction="mean")#nn.CrossEntropyLoss(reduction="mean")
+        # dl = dis_loss(
+        #    #self.dis_mlp(
+        #    #    torch.reshape(
+        #    #        self.mu[:, : self.z_dim_constrained, :, :],
+        #    #        (self.mu.shape[0], -1),
+        #    #    )
+        #    #),
+        #    #dataset_lbl,
+        #    self.dis_cnn(
+        #        self.mu[:, :self.z_dim_constrained]
+        #        ),
+        #    self.max_pooling_2d(Mm[:, :1] * x)
+        # )
 
-        loss = L - 10 * dl
+        loss = L - 1 * dl
 
         loss_dict = {
             "loss": loss,
