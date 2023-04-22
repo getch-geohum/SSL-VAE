@@ -11,7 +11,7 @@ from torch.utils.data import DataLoader, ConcatDataset
 import matplotlib
 import matplotlib.pyplot as plt
 
-# matplotlib.use("Agg")
+matplotlib.use("Agg")
 import sys
 import random
 from utils import *
@@ -398,10 +398,28 @@ def main(args):
             # Plot the latent rv, all, constrained and unconstrained
             # mu_train_modified[:, : model.z_dim_constrained] = torch.randn(
             #    mu_train_modified[:, : model.z_dim_constrained].shape) * 0
-            for d in range(2):
-                mu_train_modified[:, d * 10 : (d + 1) * 10] = torch.mean(
-                    mu_train_modified[:, d * 10 : (d + 1) * 10], axis=1, keepdims=True
-                )
+
+            b, c, h, w = mu_train_modified.shape
+            mu_train_modified = mu_train_modified.reshape(
+                (b, model.nb_dataset, model.z_dim_constrained, h, w)
+            )
+            for d in range(model.nb_dataset):
+                for z_d in range(model.z_dim_constrained):
+                    # mu_train_modified[:, d, z_d] = mu_train_modified[:, 1, z_d]
+                    mu_train_modified[:, d, z_d] = torch.mean(
+                        torch.stack(
+                            [
+                                mu_train_modified[:, d_, z_d]
+                                for d_ in range(model.nb_dataset)
+                            ],
+                            axis=1,
+                        ),
+                        axis=1,
+                    )
+            mu_train_modified = mu_train_modified.reshape((b, -1, h, w))
+            # mu_train_modified[:] = torch.mean(
+            #        mu_train_modified[:], axis=1, keepdims=True
+            # )
             rec_modified = model.mean_from_lambda(model.decoder(mu_train_modified))
 
             img_train = utils.make_grid(

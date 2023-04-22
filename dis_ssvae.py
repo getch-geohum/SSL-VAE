@@ -12,7 +12,7 @@ from torchvision import transforms
 
 import matplotlib
 
-# matplotlib.use("TkAgg")
+matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
 
 from mlp import MLP
@@ -110,7 +110,7 @@ class DIS_SSVAE(nn.Module):
         self.conv_decoder = nn.Sequential(*self.decoder_layers)
 
         self.nb_dataset = nb_dataset
-        self.z_dim_constrained = 10
+        self.z_dim_constrained = 2
 
         # self.dis_mlp = MLP(
         #    self.z_dim_constrained * self.latent_img_size**2, [128], self.nb_dataset
@@ -139,7 +139,7 @@ class DIS_SSVAE(nn.Module):
         #    #nn.ReLU(),
         #    )
 
-        self.max_pooling_2d = torch.nn.MaxPool2d(4, 2, 1)
+        # self.max_pooling_2d = torch.nn.MaxPool2d(4, 2, 1)
 
     def encoder(self, x):
         x = self.conv_encoder(x)
