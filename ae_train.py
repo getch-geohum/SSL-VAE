@@ -403,19 +403,19 @@ def main(args):
             mu_train_modified = mu_train_modified.reshape(
                 (b, model.nb_dataset, model.z_dim_constrained, h, w)
             )
-            for d in range(model.nb_dataset):
+            for d in [1, 2]:  # range(model.nb_dataset):
                 for z_d in range(model.z_dim_constrained):
-                    # mu_train_modified[:, d, z_d] = mu_train_modified[:, 1, z_d]
-                    mu_train_modified[:, d, z_d] = torch.mean(
-                        torch.stack(
-                            [
-                                mu_train_modified[:, d_, z_d]
-                                for d_ in range(model.nb_dataset)
-                            ],
-                            axis=1,
-                        ),
-                        axis=1,
-                    )
+                    mu_train_modified[:, d, z_d] = mu_train_modified[:, 0, z_d]
+                    # mu_train_modified[:, d, z_d] = torch.mean(
+                    #    torch.stack(
+                    #        [
+                    #            mu_train_modified[:, d_, z_d]
+                    #            for d_ in range(model.nb_dataset)
+                    #        ],
+                    #        axis=1,
+                    #    ),
+                    #    axis=1,
+                    # )
             mu_train_modified = mu_train_modified.reshape((b, -1, h, w))
             # mu_train_modified[:] = torch.mean(
             #        mu_train_modified[:], axis=1, keepdims=True
