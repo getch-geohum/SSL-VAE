@@ -398,6 +398,8 @@ class TrainDataset(Dataset):
                 self.transform(mdf),
                 self.transform(msk),
                 self.transform(msk_iv),
+                None,
+                torch.tensor(self.dataset_label),
             )
 
 

@@ -20,7 +20,14 @@ from mlp import MLP
 
 class DIS_SSVAE(nn.Module):
     def __init__(
-        self, img_size, nb_channels, latent_img_size, z_dim, nb_dataset, beta=0.1
+        self,
+        img_size,
+        nb_channels,
+        latent_img_size,
+        z_dim,
+        nb_dataset,
+        beta=0.1,
+        lr_scheduler=None,
     ):
         """ """
         super(DIS_SSVAE, self).__init__()

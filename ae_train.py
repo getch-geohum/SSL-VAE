@@ -27,19 +27,18 @@ def train(model, train_loader, device, optimizer, betas, c_epoch, txtt, schedule
 
     print("Looks grate, go ahead!........................")
     for batch_idx, (a, b, c, d, e, lbl) in enumerate(train_loader):
-        # print(f"Shape of a is: {a.shape}")
         print(batch_idx + 1, end=", ", flush=True)
         a = a.to(device)
         b = b.to(device)
         c = c.to(device)
         d = d.to(device)
-        e = e.to(device)
-        lbl = lbl.to(device)
+
+        if e is not None:
+            e = e.to(device)
+        if lbl is not None:
+            lbl = lbl.to(device)
 
         optimizer.zero_grad(set_to_none=True)  # otherwise grads accumulate in backward
-
-        # loss, rec_im, loss_dict_new = model.step(
-        #    (a, b, c, d, e), beta=beta)
 
         if type(model) is SSAE or type(model) is SS_AEmvtec:
             loss, rec_im, loss_dict_new = model.step((a, b, c, d))
@@ -191,29 +190,40 @@ def main(args):
     else:
         nsteps = len(train_dataloader)
     ###############################################################################
-    # scale = (args.max_beta - args.min_beta) / (args.num_epochs*nsteps)
-    # lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer=optimizer,T_max=nsteps*args.num_epochs, eta_min=1e-7)
+    scale = (args.max_beta - args.min_beta) / (args.num_epochs * nsteps)
+    lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer=optimizer, T_max=nsteps * args.num_epochs, eta_min=1e-7
+    )
 
-    # if args.anneal_beta:
-    #    if args.anneal_cyclic:
-    #        betas = computeLinearBeta(num_epochs=args.num_epochs, steps_per_epoch=nsteps, cycle=args.cycle, ratio=args.ratio)
-    #        assert len(betas) == nsteps*args.num_epochs, f'number of betas {len(betas)} and total training steps {nsteps*args.num_epochs} were not the same'
-    #    else:
-    #        betas = [np.round(i*scale, 4) for i in range(args.num_epochs*nsteps)]
-    # else:
-    betas = [args.max_beta] * nsteps * args.num_epochs
+    if args.anneal_beta:
+        if args.anneal_cyclic:
+            betas = computeLinearBeta(
+                num_epochs=args.num_epochs,
+                steps_per_epoch=nsteps,
+                cycle=args.cycle,
+                ratio=args.ratio,
+            )
+            assert (
+                len(betas) == nsteps * args.num_epochs
+            ), f"number of betas {len(betas)} and total training steps {nsteps*args.num_epochs} were not the same"
+        else:
+            betas = [np.round(i * scale, 4) for i in range(args.num_epochs * nsteps)]
+    else:
+        betas = [args.max_beta] * nsteps * args.num_epochs
 
     for epoch in range(args.num_epochs):
         if epoch == 0:
-            # if args.anneal_beta:
-            #    print('Training will be progressing with kld annealing')
-            #    if args.anneal_cyclic:
-            #        print('The kld annealing will follow cyclic annealing with linear increase strategy')
-            #    else:
-            #        print('The kld annealing will follow a linear strategy')
+            if args.anneal_beta:
+                print("Training will be progressing with kld annealing")
+                if args.anneal_cyclic:
+                    print(
+                        "The kld annealing will follow cyclic annealing with linear increase strategy"
+                    )
+                else:
+                    print("The kld annealing will follow a linear strategy")
 
-            # else:
-            print("Training will be progressing with fixed beta: {args.max_beta}")
+            else:
+                print(f"Training will be progressing with fixed beta: {args.max_beta}")
 
         print("Epoch", epoch + 1)
 
@@ -225,8 +235,8 @@ def main(args):
             betas=betas,
             c_epoch=epoch,
             txtt=step_metric,
+            scheduler=lr_scheduler,
         )
-        # scheduler=lr_scheduler)
         print(f"epoch [{epoch+1}/{args.num_epochs}], train loss: {round(loss,6)}")
 
         f_name = os.path.join(out_dir, f"{args.exp}_loss_values.txt")
