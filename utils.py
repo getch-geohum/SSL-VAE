@@ -186,6 +186,11 @@ def parse_args():
         type=lambda s: re.split(",", s),
         help='list of selected folders separated with comma without space or "all" to loop through all datasets ',
     )
+    parser.add_argument("--z_dim_constrained",
+            type=int,
+            help='constrained latent space dimesnion for disintanglement',
+            default=2,
+            )
 
     return parser.parse_args()
 
@@ -271,6 +276,7 @@ def load_ssae(args):
             img_size=args.img_size,
             nb_channels=args.nb_channels,
             nb_dataset=len(args.data),
+            z_dim_constrained=args.z_dim_constrained,
         )
     if args.model == "ss_cvae":
         print(
@@ -290,7 +296,7 @@ def load_ssae(args):
 
 def load_model_parameters(model, file_name, dir1, device):
     print(f"Trying to load: {file_name}")
-    state_dict = torch.load(os.path.join(dir1, file_name), map_location=device)
+    state_dict = torch.load(dir1 + f'/{file_name}', map_location=device)
     model.load_state_dict(state_dict, strict=False)
     print(f"{file_name} loaded !")
 
@@ -454,7 +460,7 @@ def get_test_dataloader(
                 print(
                     f"{args.data} CAMP dataset will be loaded for training from director {args.data_dir}"
                 )
-                path = args.data_dir + f"/{args.data}"
+                path = args.data_dir + f"/{args.data[0]}"
                 test_dataset = TestDataset(
                     path,
                     fake_dataset_size=fake_dataset_size,
@@ -495,23 +501,25 @@ def get_test_dataloader(
             #    for i in range(len(test_dataset))
             # ]
             # Merge the datasets into one dataloader with a Concatenator Dataset class
+        else:
             test_dataloader = DataLoader(
                 ConcatDataset(test_dataset),
                 batch_size=args.batch_size,
                 shuffle=True,
                 num_workers=12,
-            )
+                drop_last=True)
+            return test_dataloader
     else:
         if return_dataset:
             return test_dataset
-        test_dataloader = DataLoader(
+        else:
+            test_dataloader = DataLoader(
             test_dataset,
             batch_size=args.batch_size_test,
             num_workers=12,
-            drop_last=True,
-        )
+            drop_last=True)
 
-    return test_dataloader
+            return test_dataloader
 
 
 def tensor_img_to_01(t, share_B=False):

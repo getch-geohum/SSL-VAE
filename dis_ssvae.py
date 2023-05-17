@@ -28,10 +28,10 @@ class DIS_SSVAE(nn.Module):
         nb_dataset,
         beta=0.1,
         lr_scheduler=None,
+        z_dim_constrained=2
     ):
         """ """
         super(DIS_SSVAE, self).__init__()
-
         self.img_size = img_size
         self.nb_channels = nb_channels
         self.latent_img_size = latent_img_size
@@ -117,11 +117,10 @@ class DIS_SSVAE(nn.Module):
         self.conv_decoder = nn.Sequential(*self.decoder_layers)
 
         self.nb_dataset = nb_dataset
-        self.z_dim_constrained = 2
+        self.z_dim_constrained = z_dim_constrained
 
-        # self.dis_mlp = MLP(
-        #    self.z_dim_constrained * self.latent_img_size**2, [128], self.nb_dataset
-        # )
+        self.dis_mlp = MLP(
+            self.z_dim_constrained * self.latent_img_size**2, [128],1)  # self.nb_dataset  or batch_size?
         # self.dis_cnn = nn.Sequential(
         #    nn.Linear(self.z_dim_constrained, self.z_dim_constrained *
         #        self.latent_img_size ** 2),
@@ -235,37 +234,37 @@ class DIS_SSVAE(nn.Module):
         # A beta coefficient that will be pixel wise and that will be bigger
         # for pixels of the mask which are very different between the original
         # and modified version of x
-        # gamma = Mn  # self.beta + Mm * torch.abs(xm - x)
-        # beta = Mn  # Mm * torch.abs(xm - x)
-        # beta_inv = Mm
-        # for i in range(self.nb_conv):
-        #    beta = nn.functional.max_pool2d(beta, 2)
-        #    beta_inv = nn.functional.max_pool2d(beta_inv, 2)
-        # beta = torch.mean(beta, axis=1)[:, None]
-        # beta_inv = torch.mean(beta_inv, axis=1)[:, None]
+        gamma = Mn  # self.beta + Mm * torch.abs(xm - x)
+        beta = Mn  # Mm * torch.abs(xm - x)
+        beta_inv = Mm
+        for i in range(self.nb_conv):
+            beta = nn.functional.max_pool2d(beta, 2)
+            beta_inv = nn.functional.max_pool2d(beta_inv, 2)
+        beta = torch.mean(beta, axis=1)[:, None]
+        beta_inv = torch.mean(beta_inv, axis=1)[:, None]
 
-        # base = 256 * 256
-        # lambda_ = 0.9
-        # w_n = (
-        #    torch.sum(Mn[:, 0, :, :], dim=(1, 2)) / base
-        # )  # [batch_n,] weight to balance contribution from unmodified region
-        # w_m = (
-        #    torch.sum(Mm[:, 0, :, :], dim=(1, 2)) / base
-        # )  # [batch_n,] weight to balance contribution from modified region
+        base = 256 * 256
+        lambda_ = 0.9
+        w_n = (
+            torch.sum(Mn[:, 0, :, :], dim=(1, 2)) / base
+         )  # [batch_n,] weight to balance contribution from unmodified region
+        w_m = (
+            torch.sum(Mm[:, 0, :, :], dim=(1, 2)) / base
+         )  # [batch_n,] weight to balance contribution from modified region
 
-        # rec_normal = torch.mean(
-        #    torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mn), dim=(1, 2)) * w_n
-        # )
-        # rec_modified = torch.mean(
-        #    torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mm), dim=(1, 2)) * w_m
-        # )
-        # rec_term = (
-        #    lambda_ * rec_normal + (1 - lambda_) * rec_modified
-        # )  # just to follow Boers work
+        rec_normal = torch.mean(
+            torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mn), dim=(1, 2)) * w_n
+         )
+        rec_modified = torch.mean(
+            torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mm), dim=(1, 2)) * w_m
+         )
+        rec_term = (
+            lambda_ * rec_normal + (1 - lambda_) * rec_modified
+         )  # just to follow Boers work
 
-        rec_term = torch.mean(
-            torch.mean(self.xent_continuous_ber(recon_x, x), dim=(1, 2))
-        )
+        #rec_term = torch.mean(
+        #    torch.mean(self.xent_continuous_ber(recon_x, x), dim=(1, 2))
+        #)
         kld = torch.mean(self.kld(dataset_lbl))
 
         # Can we imagine different beta for the constrained and unconstrained
@@ -275,23 +274,24 @@ class DIS_SSVAE(nn.Module):
 
         ### DISENTANGLEMENT MODULE
         # NOTE y a til une maj des poids de l'encodeur ici ?
-        dl = torch.zeros_like(kld)
-        # dis_loss = nn.MSELoss(reduction="mean")#nn.CrossEntropyLoss(reduction="mean")
-        # dl = dis_loss(
-        #    #self.dis_mlp(
-        #    #    torch.reshape(
-        #    #        self.mu[:, : self.z_dim_constrained, :, :],
-        #    #        (self.mu.shape[0], -1),
-        #    #    )
-        #    #),
-        #    #dataset_lbl,
-        #    self.dis_cnn(
+        #dl = torch.zeros_like(kld)
+
+
+        #print('-->Label size<-- ', dataset_lbl.shape)
+
+        dis_loss = nn.MSELoss(reduction="mean")#nn.CrossEntropyLoss(reduction="mean")
+        dl = dis_loss(
+                self.dis_mlp(
+                    torch.reshape(
+                        self.mu[:, : self.z_dim_constrained, :, :],
+                        (self.mu.shape[0], -1))), dataset_lbl.float().reshape(-1,1))
+        #self.dis_cnn(
         #        self.mu[:, :self.z_dim_constrained]
         #        ),
         #    self.max_pooling_2d(Mm[:, :1] * x)
-        # )
+        #)
 
-        loss = L - 1 * dl
+        loss = L - dl # 1 * dl
 
         loss_dict = {
             "loss": loss,

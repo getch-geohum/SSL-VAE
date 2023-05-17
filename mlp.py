@@ -25,4 +25,6 @@ class MLP(nn.Module):
         """
         forward pass
         """
-        return self.fc(inputs)
+        fcs = self.fc(inputs)
+        #print('--->Shape of FCs<---: ', fcs.shape)
+        return fcs.reshape(-1,1)

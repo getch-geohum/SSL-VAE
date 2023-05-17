@@ -4,25 +4,27 @@
 python ae_train.py\
 	--model=dis_ssvae\
 	--exp=dis_ssvae\
-	--num_epochs=51\
+	--num_epochs=100\
 	--lr=1e-4\
 	--img_size=256\
 	--batch_size=16\
 	--batch_size_test=8\
 	--latent_img_size=32\
-    --z_dim=6\
-    --lamda=0.9\
-    --nb_channels=4\
-    --fake_dataset_size=500\
-    --params_id=100\
-    --dst_dir=./outputs/\
-    --data_dir=../data/\
-    --data=Minawao_june_2016,Minawao_feb_2017,Tza_oct_2016\
-    --max_beta=1\
-    --dataset=camp\
+	--z_dim=54\
+	--lamda=0.9\
+	--nb_channels=4\
+	--fake_dataset_size=100\
+	--params_id=100\
+	--dst_dir=D:/DATA/MVCamp_dis/outputs_34full_m6\
+	--data_dir=D:/DATA/rawdata/camp\
+	--data=Deghale_Apr_2017,Kule_tirkidi_jun_2018,Kule_tirkidi_marc_2017,kutupalong_sept_2017,Minawao_feb_2017,Minawao_june_2016,Nguyen_march_2017,Tza_oct_2016,Zamzam_april_2022\
+	--max_beta=1\
+	--dataset=camp\
+	--z_dim_constrained=6\
 	--force_train\
 	--with_mask\
 	--with_prob\
+
     #--with_condition\
 	#--anneal_beta\
 	#--anneal_cyclic\

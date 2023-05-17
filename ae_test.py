@@ -56,20 +56,20 @@ def test(args):
     np.random.seed(seed)
 
     checkpoints_dir = f'{args.dst_dir}/torch_checkpoints'  
-    feature_dir = f'{args.dst_dir}/torch_features' # to save latent space features
+    feature_dir = f'{args.dst_dir}/torch_features/{args.data[0]}' # to save latent space features
     if not os.path.exists(feature_dir):
         os.makedirs(feature_dir, exist_ok=True)
     args.batch_size_test = 1
     auc_file = f"{args.dst_dir}/torch_logs/{args.params_id}_localize_metric_ssmsummary.txt"
     if args.validate:  # mainly to save mvtec normal images without ground truth data
-        predictions_dir =f"{args.dst_dir}/predictions_good/"
+        predictions_dir = f"{args.dst_dir}/predictions_good/"
     else:
-        predictions_dir =f"{args.dst_dir}/predictions/"   # need change
+        predictions_dir =f"{args.dst_dir}/predictions/{args.data[0]}"   # need change
     if not os.path.exists(predictions_dir):
         os.makedirs(predictions_dir, exist_ok=True)
 
     test_dataloader = get_test_dataloader(args,fake_dataset_size=None) 
-
+    print('length of test data loader-->',len(test_dataloader))
     # Load model
     model = load_ssae(args)   # loade vae args
     model.to(device)
@@ -92,132 +92,134 @@ def test(args):
     aucs_comb = []
 
     pbar = tqdm(test_dataloader)
-    for ii,(imgs, gt) in enumerate(pbar): # changed
-        print(f'SAPES OF IMAGES: {imgs.shape}, SHAPE of ground truth: {gt.shape}')
+    for ii,(imgs, gt,_) in enumerate(pbar): # changed
+        #print(f'SAPES OF IMAGES: {imgs.shape}, SHAPE of ground truth: {gt.shape}')
         imgs = imgs.to(device)
         gt_np = gt[0].cpu().numpy().astype(float)
         #print('Ground truth shape', gt_np.shape)
         #print('Ground truth dtype', gt_np.dtype)
         if args.model in ['ssae','mv_ae']:
-            x_rec = model(imgs)
+            x_rec = model(imgs) 
         else:
-            x_rec,_ = model(imgs)
-            deep_embed = _[0][0].detach().cpu().numpy()
-            np.save(feature_dir + f'/{ii}_deep_feat.npy', deep_embed)
+            x_rec_ = model.encoder(imgs)
+            print(x_rec_[0].shape)
+            #x_rec,_ = model(imgs)
+            #deep_embed = _[0][0].detach().cpu().numpy()
+            #np.save(feature_dir + f'/{ii}_deep_feat.npy', deep_embed)
 
-        #print(f'Reconstruction shape: {x_rec.shape}')
-        #print(f'shape of rec: {x_rec.shape}; shape of imgs: {imgs.shape}')
-        score, ssim_map = dissimilarity_func(x_rec[0],imgs[0][:4], 11)  
+        ##print(f'Reconstruction shape: {x_rec.shape}')
+        ##print(f'shape of rec: {x_rec.shape}; shape of imgs: {imgs.shape}')
+        #score, ssim_map = dissimilarity_func(x_rec[0],imgs[0][:4], 11)  
 
-        ssim_map = ((ssim_map - np.amin(ssim_map)) / (np.amax(ssim_map) - np.amin(ssim_map))) # normalized structural similarity index
+        #ssim_map = ((ssim_map - np.amin(ssim_map)) / (np.amax(ssim_map) - np.amin(ssim_map))) # normalized structural similarity index
 
-        mad = torch.mean(torch.abs(x_rec[0]-imgs[0][:4]), dim=0) # mean absolute deviation mean(|Xrec-X|)  
-        mad = mad.detach().cpu().numpy()
-        mad = ((mad - np.amin(mad)) / (np.amax(mad) - np.amin(mad)))
+        #mad = torch.mean(torch.abs(x_rec[0]-imgs[0][:4]), dim=0) # mean absolute deviation mean(|Xrec-X|)  
+        #mad = mad.detach().cpu().numpy()
+        #mad = ((mad - np.amin(mad)) / (np.amax(mad) - np.amin(mad)))
 
-        mad_a = torch.mean(torch.norm((x_rec[0]-imgs[0][:4]), 2,dim=0, keepdim=True), dim=0) # mean(||Xrec-X||2
-        mad_a = mad_a.detach().cpu().numpy()
-        mad_a = ((mad_a - np.amin(mad_a)) / (np.amax(mad_a) - np.amin(mad_a)))
+        #mad_a = torch.mean(torch.norm((x_rec[0]-imgs[0][:4]), 2,dim=0, keepdim=True), dim=0) # mean(||Xrec-X||2
+        #mad_a = mad_a.detach().cpu().numpy()
+        #mad_a = ((mad_a - np.amin(mad_a)) / (np.amax(mad_a) - np.amin(mad_a)))
 
 
-        amaps = ssim_map
-        amaps_comb = mad * ssim_map   # combined with structural simmilarity and mean absolute deviation
-        amaps = ((amaps - np.amin(amaps)) / (np.amax(amaps) - np.amin(amaps)))
-        amaps_comb = ((amaps_comb - np.amin(amaps_comb)) / (np.amax(amaps_comb) - np.amin(amaps_comb)))
-        print(f'== Shape of amaps: {amaps.shape}==')
+        #amaps = ssim_map
+        #amaps_comb = mad * ssim_map   # combined with structural simmilarity and mean absolute deviation
+        #amaps = ((amaps - np.amin(amaps)) / (np.amax(amaps) - np.amin(amaps)))
+        #amaps_comb = ((amaps_comb - np.amin(amaps_comb)) / (np.amax(amaps_comb) - np.amin(amaps_comb)))
+        ##print(f'== Shape of amaps: {amaps.shape}==')
 
         
-        preds_a = amaps.copy()
-        preds_b = mad_a.copy() #
-        preds_c = mad.copy()
-        preds_d = amaps_comb.copy()
-        mask = np.zeros(gt_np.shape)
+        #preds_a = amaps.copy()
+        #preds_b = mad_a.copy() #
+        #preds_c = mad.copy()
+        #preds_d = amaps_comb.copy()
+        #mask = np.zeros(gt_np.shape)
 
-        try:
-            auc_a = roc_auc_score(gt_np.astype(np.uint8).flatten(), preds_a.flatten()) # AUC score per image chip
-            auc_b = roc_auc_score(gt_np.astype(np.uint8).flatten(), preds_b.flatten())
-            auc_c = roc_auc_score(gt_np.astype(np.uint8).flatten(), preds_c.flatten())
-            auc_d = roc_auc_score(gt_np.astype(np.uint8).flatten(), preds_d.flatten())
+        #try:
+            #auc_a = roc_auc_score(gt_np.astype(np.uint8).flatten(), preds_a.flatten()) # AUC score per image chip
+            #auc_b = roc_auc_score(gt_np.astype(np.uint8).flatten(), preds_b.flatten())
+            #auc_c = roc_auc_score(gt_np.astype(np.uint8).flatten(), preds_c.flatten())
+            #auc_d = roc_auc_score(gt_np.astype(np.uint8).flatten(), preds_d.flatten())
             
-            #aucs.append(auc)
+            ##aucs.append(auc)
 
-            aucs_ssim.append(auc_a)
-            aucs_mads.append(auc_c)
-            aucs_madsc.append(auc_b)
-            aucs_comb.append(auc_d)
+            #aucs_ssim.append(auc_a)
+            #aucs_mads.append(auc_c)
+            #aucs_madsc.append(auc_b)
+            #aucs_comb.append(auc_d)
 
-        except ValueError:
-            pass
-                # ROCAUC will not be defined when one class only in y_true
+        #except ValueError:
+            #pass
+                ## ROCAUC will not be defined when one class only in y_true
 
-        #m_aucs = np.mean(aucs)   aucs_mads
+        ##m_aucs = np.mean(aucs)   aucs_mads
 
-        m_aucs_ssim_s = np.mean(aucs_ssim)   # m_aucs_ssim
-        m_aucs_mads_s = np.mean(aucs_mads)
-        m_aucs_madsc_s = np.mean(aucs_madsc)
-        m_aucs_comb_s = np.mean(aucs_comb)
+        #m_aucs_ssim_s = np.mean(aucs_ssim)   # m_aucs_ssim
+        #m_aucs_mads_s = np.mean(aucs_mads)
+        #m_aucs_madsc_s = np.mean(aucs_madsc)
+        #m_aucs_comb_s = np.mean(aucs_comb)
 
 
-        pbar.set_description(f"mean ROCAUC: {m_aucs_ssim_s:.3f}")
+        #pbar.set_description(f"mean ROCAUC: {m_aucs_ssim_s:.3f}")
 
-        if args.save_preds:
-            ori = imgs[0].permute(1, 2, 0).cpu().numpy()
+        #if args.save_preds:
+            #ori = imgs[0].permute(1, 2, 0).cpu().numpy()
         
-            ori = ori[..., :3] # NOTE 4 bands panoptics
+            #ori = ori[..., :3] # NOTE 4 bands panoptics
         
-            rec = x_rec[0].detach().permute(1, 2, 0).cpu().numpy()
-            rec = rec[..., :3] # NOTE 4 bands panoptics
-            rec = np.dstack((rec[:,:,2], rec[:,:,1],rec[:,:,0]))  # to have clear RGB image
-            path_to_save = predictions_dir # f'{args.dst_dir}/predictions/'  # needs reshafling
+            #rec = x_rec[0].detach().permute(1, 2, 0).cpu().numpy()
+            #rec = rec[..., :3] # NOTE 4 bands panoptics
+            #rec = np.dstack((rec[:,:,2], rec[:,:,1],rec[:,:,0]))  # to have clear RGB image
+            #path_to_save = predictions_dir # f'{args.dst_dir}/predictions/{args.data[0]}/'  # needs reshafling
 
-            img_to_save = Image.fromarray((ori * 255).astype(np.uint8))
-            img_to_save.save(path_to_save + '{}_ori.png'.format(str(ii))) 
-            img_to_save = Image.fromarray(gt_np[0,:,:].astype(np.uint8))    
-            img_to_save.save(path_to_save + '{}_gt.png'.format(str(ii))) 
-            img_to_save = Image.fromarray((rec * 255).astype(np.uint8))
-            img_to_save.save(path_to_save + '{}_rec.png'.format(str(ii)))    
-            #np.save(path_to_save + f'{ii}_final_amap.npy', amaps)  
+            #img_to_save = Image.fromarray((ori * 255).astype(np.uint8))
+            #img_to_save.save(path_to_save + '/{}_ori.png'.format(str(ii))) 
+            #img_to_save = Image.fromarray(gt_np[0,:,:].astype(np.uint8))    
+            #img_to_save.save(path_to_save + '/{}_gt.png'.format(str(ii))) 
+            #img_to_save = Image.fromarray((rec * 255).astype(np.uint8))
+            #img_to_save.save(path_to_save + '/{}_rec.png'.format(str(ii)))    
+            ##np.save(path_to_save + f'{ii}_final_amap.npy', amaps)  
 
-            cm = plt.get_cmap('jet')
-            amaps = cm(amaps)
-            img_to_save = Image.fromarray((amaps[..., :3] * 255).astype(np.uint8))
-            img_to_save.save(path_to_save + '{}_final_amap.png'.format(str(ii))) 
+            #cm = plt.get_cmap('jet')
+            #amaps = cm(amaps)
+            #img_to_save = Image.fromarray((amaps[..., :3] * 255).astype(np.uint8))
+            #img_to_save.save(path_to_save + '/{}_final_amap.png'.format(str(ii))) 
         
-            mads = cm(mad)
-            img_to_save = Image.fromarray((mads[..., :3] * 255).astype(np.uint8))
-            img_to_save.save(path_to_save + '{}_final_mads.png'.format(str(ii))) 
+            #mads = cm(mad)
+            #img_to_save = Image.fromarray((mads[..., :3] * 255).astype(np.uint8))
+            #img_to_save.save(path_to_save + '/{}_final_mads.png'.format(str(ii))) 
 
-            mads_a = cm(mad_a)
-            img_to_save = Image.fromarray((mads_a[..., :3] * 255).astype(np.uint8))
-            img_to_save.save(path_to_save + '{}_final_mads_copy.png'.format(str(ii))) 
+            #mads_a = cm(mad_a)
+            #img_to_save = Image.fromarray((mads_a[..., :3] * 255).astype(np.uint8))
+            #img_to_save.save(path_to_save + '/{}_final_mads_copy.png'.format(str(ii))) 
 
-            combs = cm(amaps_comb)
-            img_to_save = Image.fromarray((combs[..., :3] * 255).astype(np.uint8))
-            img_to_save.save(path_to_save + '{}_final_combs.png'.format(str(ii))) 
+            #combs = cm(amaps_comb)
+            #img_to_save = Image.fromarray((combs[..., :3] * 255).astype(np.uint8))
+            #img_to_save.save(path_to_save + '/{}_final_combs.png'.format(str(ii))) 
 
-    #m_auc = np.mean(aucs)
+    ##m_auc = np.mean(aucs)
 
 
-    m_aucs_ssim = np.mean(aucs_ssim)  # m_aucs_ssim
-    m_aucs_mads = np.mean(aucs_mads)
-    m_aucs_madsc = np.mean(aucs_madsc)
-    m_aucs_comb = np.mean(aucs_comb)
+    #m_aucs_ssim = np.mean(aucs_ssim)  # m_aucs_ssim
+    #m_aucs_mads = np.mean(aucs_mads)
+    #m_aucs_madsc = np.mean(aucs_madsc)
+    #m_aucs_comb = np.mean(aucs_comb)
 
-    if not args.validate:
-        with open(auc_file, 'a+') as txt:
-            txt.write('+===================================+\n')
-            txt.write(f'SSIM mean AUC: {m_aucs_ssim}\n')
-            txt.write(f'MAD mean AUC: {m_aucs_mads}\n')
-            txt.write(f'MAD_baur mean AUC: {m_aucs_madsc}\n')
-            txt.write(f'SSIM_MAD mean AUC: {m_aucs_comb}\n')
-            txt.write('+===================================+\n')
+    #if not args.validate:
+        #with open(auc_file, 'a+') as txt:
+            #txt.write('+===================================+\n')
+            #txt.write(f'SSIM mean AUC: {m_aucs_ssim}\n')
+            #txt.write(f'MAD mean AUC: {m_aucs_mads}\n')
+            #txt.write(f'MAD_baur mean AUC: {m_aucs_madsc}\n')
+            #txt.write(f'SSIM_MAD mean AUC: {m_aucs_comb}\n')
+            #txt.write('+===================================+\n')
 
-            print("Mean auc on for dataset based on SSIM: ", m_aucs_ssim)
-            print("Mean auc on for dataset based on MAD: ", m_aucs_mads)
-            print("Mean auc on for dataset based on MAD_c: ", m_aucs_madsc)
-            print("Mean auc on for dataset based on MAD_SSIM: ", m_aucs_comb)
-    else:
-        pass
+            #print("Mean auc on for dataset based on SSIM: ", m_aucs_ssim)
+            #print("Mean auc on for dataset based on MAD: ", m_aucs_mads)
+            #print("Mean auc on for dataset based on MAD_c: ", m_aucs_madsc)
+            #print("Mean auc on for dataset based on MAD_SSIM: ", m_aucs_comb)
+    #else:
+        #pass
 
 if __name__ == "__main__":
     args = parse_args()
