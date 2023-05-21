@@ -211,6 +211,17 @@ class DIS_SSVAE(nn.Module):
         logvar = self.logvar.reshape((b, self.nb_dataset, self.z_dim_constrained, h, w))
         b, c, h, w = self.mu.shape
         mu = self.mu.reshape((b, self.nb_dataset, self.z_dim_constrained, h, w))
+
+        #mu = torch.mean(mu,dim=1)
+        #logvar = torch.mean(logvar, dim=1)
+        #return 0.5 * torch.mean(
+        #        -1
+        #        - logvar
+        #        + mu.pow(2)
+        #        + logvar.exp(),
+        #        dim=(1),
+        #        )
+
         return 0.5 * torch.mean(
             -1
             - logvar[:, dataset_lbl]
@@ -234,37 +245,37 @@ class DIS_SSVAE(nn.Module):
         # A beta coefficient that will be pixel wise and that will be bigger
         # for pixels of the mask which are very different between the original
         # and modified version of x
-        gamma = Mn  # self.beta + Mm * torch.abs(xm - x)
-        beta = Mn  # Mm * torch.abs(xm - x)
-        beta_inv = Mm
-        for i in range(self.nb_conv):
-            beta = nn.functional.max_pool2d(beta, 2)
-            beta_inv = nn.functional.max_pool2d(beta_inv, 2)
-        beta = torch.mean(beta, axis=1)[:, None]
-        beta_inv = torch.mean(beta_inv, axis=1)[:, None]
+        #gamma = Mn  # self.beta + Mm * torch.abs(xm - x)
+        #beta = Mn  # Mm * torch.abs(xm - x)
+        #beta_inv = Mm
+        #for i in range(self.nb_conv):
+        #    beta = nn.functional.max_pool2d(beta, 2)
+        #    beta_inv = nn.functional.max_pool2d(beta_inv, 2)
+        #beta = torch.mean(beta, axis=1)[:, None]
+        #beta_inv = torch.mean(beta_inv, axis=1)[:, None]
 
-        base = 256 * 256
-        lambda_ = 0.9
-        w_n = (
-            torch.sum(Mn[:, 0, :, :], dim=(1, 2)) / base
-         )  # [batch_n,] weight to balance contribution from unmodified region
-        w_m = (
-            torch.sum(Mm[:, 0, :, :], dim=(1, 2)) / base
-         )  # [batch_n,] weight to balance contribution from modified region
+        #base = 256 * 256
+        #lambda_ = 0.9
+        #w_n = (
+        #    torch.sum(Mn[:, 0, :, :], dim=(1, 2)) / base
+        # )  # [batch_n,] weight to balance contribution from unmodified region
+        #w_m = (
+        #    torch.sum(Mm[:, 0, :, :], dim=(1, 2)) / base
+        # )  # [batch_n,] weight to balance contribution from modified region
 
-        rec_normal = torch.mean(
-            torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mn), dim=(1, 2)) * w_n
-         )
-        rec_modified = torch.mean(
-            torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mm), dim=(1, 2)) * w_m
-         )
-        rec_term = (
-            lambda_ * rec_normal + (1 - lambda_) * rec_modified
-         )  # just to follow Boers work
+        #rec_normal = torch.mean(
+        #    torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mn), dim=(1, 2)) * w_n
+        # )
+        #rec_modified = torch.mean(
+        #    torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mm), dim=(1, 2)) * w_m
+        # )
+        #rec_term = (
+        #    lambda_ * rec_normal - (1 - lambda_) * rec_modified
+        # )  # just to follow Boers work
 
-        #rec_term = torch.mean(
-        #    torch.mean(self.xent_continuous_ber(recon_x, x), dim=(1, 2))
-        #)
+        rec_term = torch.mean(
+            torch.mean(self.xent_continuous_ber(recon_x, x), dim=(1, 2))
+            )
         kld = torch.mean(self.kld(dataset_lbl))
 
         # Can we imagine different beta for the constrained and unconstrained
@@ -274,17 +285,17 @@ class DIS_SSVAE(nn.Module):
 
         ### DISENTANGLEMENT MODULE
         # NOTE y a til une maj des poids de l'encodeur ici ?
-        #dl = torch.zeros_like(kld)
+        dl = torch.zeros_like(kld)
 
 
         #print('-->Label size<-- ', dataset_lbl.shape)
 
-        dis_loss = nn.MSELoss(reduction="mean")#nn.CrossEntropyLoss(reduction="mean")
-        dl = dis_loss(
-                self.dis_mlp(
-                    torch.reshape(
-                        self.mu[:, : self.z_dim_constrained, :, :],
-                        (self.mu.shape[0], -1))), dataset_lbl.float().reshape(-1,1))
+        #dis_loss = nn.MSELoss(reduction="mean")#nn.CrossEntropyLoss(reduction="mean")
+        #dl = dis_loss(
+        #        self.dis_mlp(
+        #            torch.reshape(
+        #                self.mu[:, : self.z_dim_constrained, :, :],
+        #                (self.mu.shape[0], -1))), dataset_lbl.float().reshape(-1,1))
         #self.dis_cnn(
         #        self.mu[:, :self.z_dim_constrained]
         #        ),

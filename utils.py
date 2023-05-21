@@ -6,6 +6,7 @@ import torch
 from torch.utils.data import DataLoader, ConcatDataset
 from datasets import *
 from mvtec_dataset import MvtechTrainDataset, MvtechTestDataset
+from vae_ori import VAE
 from AE import SSAE
 from ssvae import SSVAE
 from c_ssvae import SS_CVAE
@@ -244,6 +245,14 @@ def load_ssae(args):
         model = SS_AEmvtec(zdim=args.z_dim)
     if args.model == "mv_cvae":
         model = SS_CVAEmvtec(zdim=args.z_dim)
+    if args.model == 'vae':
+        print(
+                f"With specified model param {args.model}:variational autoencoder will be loaded"
+                )
+        model = VAE(img_size=args.img_size,
+                nb_channels=args.nb_channels,
+                latent_img_size=args.latent_img_size,
+                z_dim=args.z_dim)
     if args.model == "ssae":
         print(
             f"with specified model param { args.model}: self-supervised autoencoder will be loaded"
