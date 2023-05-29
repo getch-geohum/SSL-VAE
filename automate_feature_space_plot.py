@@ -46,6 +46,66 @@ from skimage import draw
 from torchvision.ops import masks_to_boxes
 import mmcv
 
+from sklearn.metrics import silhouette_score
+# import pandas as pd
+
+# for uncompressed features
+def computeSilhoteFull(in_root, out_root): # to run the distance metric on raw latent space ust after reshaping
+    folds = sorted(os.listdir(in_root))
+    ARR = []
+    LBL = []
+    for j, fold in enumerate(folds):
+        files = [np.load(x) for x in sorted(glob(f'{in_root}/{fold}/*.npy'))]
+        label_i = [[j]*len(file) for file in files]
+        label = list(itertools.chain(*label_i))
+
+        ARR+=[x.reshape(x.shape[0],-1) for x in files]
+        LBL+=label
+    ARR = np.vstack(tuple(ARR))
+    LBL = np.array(LBL).ravel()
+    assert ARR.shape[0] == LBL.shape[0]
+
+    cityblock = 0 # silhouette_score(ARR, LBL, metric='cityblock')
+    cosine = 0 # silhouette_score(ARR, LBL, metric='cosine')
+    euclidean = silhouette_score(ARR, LBL, metric='euclidean',n_jobs=-1)
+    l1 = 0 # silhouette_score(ARR, LBL, metric='l1')
+    l2 = 0 # silhouette_score(ARR, LBL, metric='l2')
+    manhattan = 0 # silhouette_score(ARR, LBL, metric='manhattan')
+    report = {'cityblock':cityblock, 'cosine':cosine, 'euclidean':euclidean, 'l1':l1, 'l2':l2,'manhattan':manhattan}
+    print(report)
+
+    with open(f'{out_root}/silhouttte_full.txt', 'a+') as rep_data:
+        rep_data.write(f'cityblock: {cityblock}\n')
+        rep_data.write(f'cosine: {cosine}\n')
+        rep_data.write(f'euclidean: {euclidean}\n')
+        rep_data.write(f'l1: {l1}\n')
+        rep_data.write(f'l2: {l2}\n')
+        rep_data.write(f'manhattan: {manhattan}\n')
+
+    #df = pd.DataFrame.from_dict(report)
+    #df.to_csv(f'{out_root}/silhouttte_full.csv')
+    
+    
+def computeSilhoteCompress(out_root): # this is mainly to compte the distance after t-SNE compression
+    feat = np.load(f'{out_root}/tsne_out.npy')
+    lbls = np.load(f'{out_root}/site_index.npy')
+    cityblock = silhouette_score(feat, lbls, metric='cityblock')
+    cosine = silhouette_score(feat, lbls, metric='cosine')
+    euclidean = silhouette_score(feat, lbls, metric='euclidean')
+    l1 = silhouette_score(feat, lbls, metric='l1')
+    l2 = silhouette_score(feat, lbls, metric='l2')
+    manhattan = silhouette_score(feat, lbls, metric='manhattan')
+    report = {'cityblock':cityblock, 'cosine':cosine, 'euclidean':euclidean, 'l1':l1, 'l2':l2,'manhattan':manhattan}
+    print(report)
+    
+    with open(f'{out_root}/silhouttte_compress.txt', 'a+') as rep_data:
+        rep_data.write(f'cityblock: {cityblock}\n')
+        rep_data.write(f'cosine: {cosine}\n')
+        rep_data.write(f'euclidean: {euclidean}\n')
+        rep_data.write(f'l1: {l1}\n')
+        rep_data.write(f'l2: {l2}\n')
+        rep_data.write(f'manhattan: {manhattan}\n')
+
 
 # TSNE related features 
 def compute_iou(mask1, mask2):
@@ -622,7 +682,12 @@ class GeneratEmbedFeatures:
             plt.legend()
             plt.savefig("{}/combined_feature_space.png".format(self.out_root))
             plt.show()
-
+      
+    def conputeSilhottte(self,data='tsne'):
+        if data == 'full':
+            computeSilhoteFull(in_root=self.data_root, out_root=self.out_root)
+        else:
+            computeSilhoteCompress(out_root=self.out_root)
 def argumentParser():
     parser = argparse.ArgumentParser(description = 'Deep feature space embeding plot')
     parser.add_argument('--data_root', help='data folder, can be either with single task or multi task', type=str, required=False, default='D:/DATA/MVCamp/FEATURSPACE_all_anneal/features')
@@ -641,3 +706,4 @@ if __name__ == "__main__":
     generator.compute_simmilarity()
     generator.compute_simmilarity_GIOU()
     generator.crossfeature_space_plot()
+    generator.conputeSilhottte(data='tsne')   # data='full'
