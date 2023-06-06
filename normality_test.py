@@ -26,7 +26,7 @@ def compareHistogram(root, out_root, z_dim=18,save=True):
             "36":['outputs_34full_vae_36','outputs_34full_m4mm']}
 
     subs = cons[str(z_dim)]
-    names = ["Deghale-2017",
+    names = ["Dagahaley-2017",
             "Kuletirkidi-2018",
             "Kuletirkidi-2017",
             "Minawao-2017",
@@ -68,7 +68,7 @@ def compareHistogram(root, out_root, z_dim=18,save=True):
 
 
 def jointHistogram(root, save=True, test_normality=True, out_root=None, name=None):
-    names = ["Deghale-2017",
+    names = ["Dagahaley-2017",
             "Kuletirkidi-2018",
             "Kuletirkidi-2017",
             "Minawao-2017",
