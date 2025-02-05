@@ -36,4 +36,4 @@ This repository also contains re-impkementations of the following research works
   python reimplementation/train_unet_alls.py  --save_path --root /path2data --sigma 5 --lr 0.0001 --epochs 50 --batch_size 4
   ```
 - [Self-supervised training with autoencoders for visual anomaly detection](https://arxiv.org/abs/2206.11723) and
-- [Towards visually explaining variational autoencoders](https://openaccess.thecvf.com/content_CVPR_2020/papers/Liu_Towards_Visually_Explaining_Variational_Autoencoders_CVPR_2020_paper.pdf)
+- [Towards visually explaining variational autoencoders](https://openaccess.thecvf.com/content_CVPR_2020/papers/Liu_Towards_Visually_Explaining_Variational_Autoencoders_CVPR_2020_paper.pdf) which is implemented in the main training function [liu_vae.py](https://github.com/getch-geohum/SSL-VAE/blob/master/liu_vae.py)
