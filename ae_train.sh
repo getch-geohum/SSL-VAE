@@ -13,8 +13,8 @@ python ae_train.py\
 	--nb_channels=4\
 	--fake_dataset_size=400\
 	--params_id=100\
-	--dst_dir=/home/getch/ssl/LUVAE_rev/\
-	--data_dir=/home/getch/DATA/VAE/data\
+	--dst_dir=/path2save\
+	--data_dir=/path2data\
 	--data=Deghale_Apr_2017,Kule_tirkidi_marc_2017,Minawao_feb_2017,Nguyen_march_2017,Zamzam_april_2022,Kule_tirkidi_jun_2018,kutupalong_sept_2017,Minawao_june_2016,Tza_oct_2016\
 	--max_beta=1\
 	--dataset=camp\
