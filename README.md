@@ -20,3 +20,16 @@ for feature space plot
 ```
 python automate_feature_space_plot.py --data_root ./root2data --save_dir ./root2save
 ```
+
+This repository also contains re-impkementations of the following research works whose re-implkementations are reported for specific task in our study
+- [PaDiM: A patch distribution modeling framework for anomaly detection and localization](https://doi.org/10.1007/978-3-030-68799-1_35)
+  ```
+  python reimplementation/PADIM_all.py ----save_path /path2save --root /path2data --arch wide_resnet50_2
+  ```
+- [Counting sea lions and elephants from aerial photography using deep learning with density map](https://doi.org/10.1186/s40317-021-00247-x)
+  
+  ```
+  python reimplementation/train_unet_alls.py  --save_path --root /path2data --sigma 5 --lr 0.0001 --epochs 50 --batch_size 4
+  ```
+- [Self-supervised training with autoencoders for visual anomaly detection](https://arxiv.org/abs/2206.11723) and
+- [Towards visually explaining variational autoencoders](https://openaccess.thecvf.com/content_CVPR_2020/papers/Liu_Towards_Visually_Explaining_Variational_Autoencoders_CVPR_2020_paper.pdf)
