@@ -6,11 +6,13 @@ import torch
 from torch.utils.data import DataLoader, ConcatDataset
 from datasets import *
 from mvtec_dataset import MvtechTrainDataset, MvtechTestDataset
+from vae_ori import VAE
 from AE import SSAE
 from ssvae import SSVAE
 from c_ssvae import SS_CVAE
 from dis_ssvae import DIS_SSVAE
 from mvtec_models import SS_AEmvtec, SS_CVAEmvtec
+from liu_vae import VAE_LIU  # re-implmentation VEVAE
 import time
 import json
 import math
@@ -37,8 +39,8 @@ def parse_args():
         default=256,
         type=int,
     )
-    parser.add_argument("--batch_size", default=16, type=int)
-    parser.add_argument("--batch_size_test", default=8, type=int)
+    parser.add_argument("--batch_size", default=4, type=int)
+    parser.add_argument("--batch_size_test", default=4, type=int)
     parser.add_argument("--num_epochs", default=1000, type=int)
     parser.add_argument(
         "--latent_img_size",
@@ -186,6 +188,20 @@ def parse_args():
         type=lambda s: re.split(",", s),
         help='list of selected folders separated with comma without space or "all" to loop through all datasets ',
     )
+    parser.add_argument("--z_dim_constrained",
+            type=int,
+            help='constrained latent space dimesnion for disintanglement',
+            default=2,
+            )
+    parser.add_argument("--delta", default=1.0, type=float) # vevae
+    parser.add_argument("--beta", default=0.1, type=float) 
+    parser.add_argument("--liu_vae", help='Whether to use Liu VAE implementation approach', dest='liu_vae', action='store_true')
+    parser.set_defaults(liu_vae=False)
+
+    parser.add_argument("--disc_module", help='Whether to use disc_module for liu_vae', dest='disc_module', action='store_true')
+    parser.set_defaults(disc_module=False)  # conv_layers
+
+    parser.add_argument('--conv_layers', type=lambda s: re.split(',', s), help='list of convlayers for liu_vae implementation attanetion map generation', required=False, default="conv_1,conv_2") # conv_1,conv_2,conv_3,conv4
 
     return parser.parse_args()
 
@@ -239,6 +255,14 @@ def load_ssae(args):
         model = SS_AEmvtec(zdim=args.z_dim)
     if args.model == "mv_cvae":
         model = SS_CVAEmvtec(zdim=args.z_dim)
+    if args.model == 'vae':
+        print(
+                f"With specified model param {args.model}:variational autoencoder will be loaded"
+                )
+        model = VAE(img_size=args.img_size,
+                nb_channels=args.nb_channels,
+                latent_img_size=args.latent_img_size,
+                z_dim=args.z_dim)
     if args.model == "ssae":
         print(
             f"with specified model param { args.model}: self-supervised autoencoder will be loaded"
@@ -271,7 +295,8 @@ def load_ssae(args):
             img_size=args.img_size,
             nb_channels=args.nb_channels,
             nb_dataset=len(args.data),
-        )
+            z_dim_constrained=args.z_dim_constrained,
+        ) # len(args.data),
     if args.model == "ss_cvae":
         print(
             f"with specified model param {args.model} without kld annealing: self-supervised conditional variational autoencoder will be loaded"
@@ -284,13 +309,25 @@ def load_ssae(args):
             mask_nb_channel=args.nb_channels,
             with_condition=args.with_condition,
         )
+        print('Total number of datasets --> {len(args.data)} <-')
+    if args.model == 'liu_vae':
+        model = VAE_LIU(
+            latent_img_size=args.latent_img_size,
+            z_dim=args.z_dim,
+            img_size=args.img_size,
+            nb_channels=args.nb_channels,
+            beta=args.beta,
+            delta=args.delta,
+            liu_vae=args.liu_vae,
+            disc_module=args.disc_module)
+        print('Liu et al anomaly attention based VAE model initiated')
 
     return model
 
 
 def load_model_parameters(model, file_name, dir1, device):
     print(f"Trying to load: {file_name}")
-    state_dict = torch.load(os.path.join(dir1, file_name), map_location=device)
+    state_dict = torch.load(dir1 + f'/{file_name}', map_location=device)
     model.load_state_dict(state_dict, strict=False)
     print(f"{file_name} loaded !")
 
@@ -339,7 +376,7 @@ def get_train_dataloader(args, return_dataset=False):
                     for ind in inds
                 ]
                 # train_dataset = torch.utils.data.ConcatDataset(train_dataset)
-                print(f"Concatenated camp test datset size: {len(train_dataset)}")
+                print(f"Concatenated camp train datset size: {len(train_dataset)}")
             else:
                 print(
                     f"{args.data} CAMP dataset will be loaded for training from {args.data_dir}"
@@ -389,7 +426,6 @@ def get_train_dataloader(args, return_dataset=False):
             ConcatDataset(train_dataset),
             batch_size=args.batch_size,
             shuffle=True,
-            num_workers=12,
         )
     else:
         if return_dataset:
@@ -398,7 +434,6 @@ def get_train_dataloader(args, return_dataset=False):
             train_dataset,
             batch_size=args.batch_size,
             shuffle=True,
-            num_workers=12,
             drop_last=True,
         )
 
@@ -454,7 +489,7 @@ def get_test_dataloader(
                 print(
                     f"{args.data} CAMP dataset will be loaded for training from director {args.data_dir}"
                 )
-                path = args.data_dir + f"/{args.data}"
+                path = args.data_dir + f"/{args.data[0]}"
                 test_dataset = TestDataset(
                     path,
                     fake_dataset_size=fake_dataset_size,
@@ -495,23 +530,23 @@ def get_test_dataloader(
             #    for i in range(len(test_dataset))
             # ]
             # Merge the datasets into one dataloader with a Concatenator Dataset class
+        else:
             test_dataloader = DataLoader(
                 ConcatDataset(test_dataset),
                 batch_size=args.batch_size,
                 shuffle=True,
-                num_workers=12,
-            )
+                drop_last=True)
+            return test_dataloader
     else:
         if return_dataset:
             return test_dataset
-        test_dataloader = DataLoader(
+        else:
+            test_dataloader = DataLoader(
             test_dataset,
             batch_size=args.batch_size_test,
-            num_workers=12,
-            drop_last=True,
-        )
+            drop_last=True)
 
-    return test_dataloader
+            return test_dataloader
 
 
 def tensor_img_to_01(t, share_B=False):

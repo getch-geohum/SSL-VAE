@@ -155,7 +155,7 @@ class SS_CVAE(nn.Module):
     def tarctanh(self, x):
         return 0.5 * torch.log((1+x)/(1-x))
 
-    def compute_loss(self,X, Mm, Mn, prob, recon_x, beta):
+    def compute_loss(self,X, Mm, Mn, prob, recon_x, beta=0.0001):
         '''x: modified input image, in Bauers paper both modified and normal image for loss computation |Rec_x-X|
             recon_x: recontructed image
             Mm: mask signifying modified regions
@@ -199,7 +199,7 @@ class SS_CVAE(nn.Module):
         return loss, loss_dict
     
 
-    def step(self, inputs, beta): # inputs contain, modified image, normal image and mask
+    def step(self, inputs): # inputs contain, modified image, normal image and mask
         X, Xm, Mm, Mn, prob = inputs
 
         #print(f'shape of X: {X.shape}')
@@ -211,7 +211,7 @@ class SS_CVAE(nn.Module):
         rec, _ = self.forward(Xm)
         #print(f'shape of rec: {rec.shape}')
 
-        loss, loss_dict = self.compute_loss(X=Xm[:,:self.exit_nb_channel,:,:], Mm=Mm[:,:self.exit_nb_channel,:,:], Mn=Mn[:,:self.exit_nb_channel,:,:], prob=prob[:,:self.exit_nb_channel,:,:], recon_x=rec, beta=beta)  # 
+        loss, loss_dict = self.compute_loss(X=Xm[:,:self.exit_nb_channel,:,:], Mm=Mm[:,:self.exit_nb_channel,:,:], Mn=Mn[:,:self.exit_nb_channel,:,:], prob=prob[:,:self.exit_nb_channel,:,:], recon_x=rec)  # 
 
         rec = self.mean_from_lambda(rec)
 

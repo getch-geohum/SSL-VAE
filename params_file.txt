@@ -7,4 +7,3 @@
 "kutupalong_sept_2017": {"ndvi_treshold": 0.3, "intensity_treshold": 150, "brightness_treshold": 0, "contrast_treshold": 0, "func": "NDVI", "equalize": 0},
 "Kule_tirkidi_jun_2018": {"ndvi_treshold": 0, "intensity_treshold": 140, "brightness_treshold": 0, "contrast_treshold": 0, "func": "grayIntensity", "equalize": 1},
 "Kule_tirkidi_marc_2017": {"ndvi_treshold": 0.1, "intensity_treshold": 145, "brightness_treshold": 0, "contrast_treshold": 0, "func": "grayIntensity", "equalize": 1}}
-

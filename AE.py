@@ -6,6 +6,10 @@ from torchvision.models.resnet import resnet18, resnet34, resnet50 # just resnet
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms
 
+'''This is re-implementation of Bauer et al Self-Supervised Training with Autoencoders for Visual Anomaly Detection
+https://arxiv.org/abs/2206.11723
+'''
+
 
 class SSAE(nn.Module):
     
@@ -54,7 +58,7 @@ class SSAE(nn.Module):
             *self.encoder_layers,
         )
         self.final_encoder = nn.Sequential(
-            nn.Conv2d(256, self.z_dim, kernel_size=1,
+            nn.Conv2d(128, self.z_dim, kernel_size=1,
             stride=1, padding=0)
         ) # self.max_depth_conv  repace 2048, 128, 256
 
@@ -100,7 +104,7 @@ class SSAE(nn.Module):
     def forward(self, x):
         out = self.encoder(x)
         out = self.decoder(out)
-        return  out # self.decoder(z), (mu, logvar)
+        return  out, None # self.decoder(z), (mu, logvar)
     
     def compute_loss(self, x, xm, Mm, Mn, recon_x):
         '''x: original input
@@ -122,7 +126,7 @@ class SSAE(nn.Module):
         b = ((1-self.lamda)/torch.norm(buttom_,1))*torch.norm(buttom,2)  # Mm*buttom 
         loss = a-b
 
-        print(f'{a.item()}--> {b.item()}--> {loss.item()}')
+        #print(f'{a.item()}--> {b.item()}--> {loss.item()}')
         
         loss_dict = {'normal':a.mean(), 'modified':b.mean(), 'total':loss.mean()}
 

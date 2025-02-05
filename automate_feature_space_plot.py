@@ -21,8 +21,8 @@ from skimage.io import imread
 from glob import glob
 from time import gmtime, strftime
 from scipy.spatial import distance
-import random
-import numpy as np
+# import random
+# import numpy as np
 from skimage.io import imsave
 import string  
 import matplotlib.pyplot as plt
@@ -35,17 +35,81 @@ import torchvision.models as models
 from ipdb import set_trace as st
 from sklearn import svm
 import torch
-import numpy as np
+# import numpy as np
 import argparse
 import json
 import os
 import copy
+import itertools
 from skimage.io import imread
 from skimage import measure
 from skimage import draw
 from torchvision.ops import masks_to_boxes
 import mmcv
+from sklearn.metrics import silhouette_score
+# import pandas as pd
 
+# for uncompressed features
+def computeSilhoteFull(in_root, out_root): # to run the distance metric on raw latent space ust after reshaping
+    folds = sorted(os.listdir(in_root))
+    ARR = []
+    LBL = []
+    for j, fold in enumerate(folds):
+        files = [np.load(x) for x in sorted(glob(f'{in_root}/{fold}/*.npy'))]
+        label_i = [[j]*len(file) for file in files]
+        label = list(itertools.chain(*label_i))
+
+        ARR+=[x.reshape(x.shape[0],-1) for x in files]
+        LBL+=label
+    ARR = np.vstack(tuple(ARR))
+    LBL = np.array(LBL).ravel()
+    assert ARR.shape[0] == LBL.shape[0]
+
+    cityblock = 0 # silhouette_score(ARR, LBL, metric='cityblock')
+    cosine = 0 # silhouette_score(ARR, LBL, metric='cosine')
+    euclidean = silhouette_score(ARR, LBL, metric='euclidean',n_jobs=-1)
+    l1 = 0 # silhouette_score(ARR, LBL, metric='l1')
+    l2 = 0 # silhouette_score(ARR, LBL, metric='l2')
+    manhattan = 0 # silhouette_score(ARR, LBL, metric='manhattan')
+    report = {'cityblock':cityblock, 'cosine':cosine, 'euclidean':euclidean, 'l1':l1, 'l2':l2,'manhattan':manhattan}
+    print(report)
+
+    with open(f'{out_root}/silhouttte_full.txt', 'a+') as rep_data:
+        rep_data.write(f'cityblock: {cityblock}\n')
+        rep_data.write(f'cosine: {cosine}\n')
+        rep_data.write(f'euclidean: {euclidean}\n')
+        rep_data.write(f'l1: {l1}\n')
+        rep_data.write(f'l2: {l2}\n')
+        rep_data.write(f'manhattan: {manhattan}\n')
+
+    #df = pd.DataFrame.from_dict(report)
+    #df.to_csv(f'{out_root}/silhouttte_full.csv')
+    
+    
+def computeSilhoteCompress(out_root): # this is mainly to compte the distance after t-SNE compression
+    feat = np.load(f'{out_root}/tsne_out.npy')
+    lbls = np.load(f'{out_root}/site_index.npy')
+    cityblock = silhouette_score(feat, lbls, metric='cityblock')
+    cosine = silhouette_score(feat, lbls, metric='cosine')
+    euclidean = silhouette_score(feat, lbls, metric='euclidean')
+    l1 = silhouette_score(feat, lbls, metric='l1')
+    l2 = silhouette_score(feat, lbls, metric='l2')
+    manhattan = silhouette_score(feat, lbls, metric='manhattan')
+    report = {'cityblock':cityblock, 'cosine':cosine, 'euclidean':euclidean, 'l1':l1, 'l2':l2,'manhattan':manhattan}
+    print(report)
+    
+    with open(f'{out_root}/silhouttte_compress.txt', 'a+') as rep_data:
+        rep_data.write(f'cityblock: {cityblock}\n')
+        rep_data.write(f'cosine: {cosine}\n')
+        rep_data.write(f'euclidean: {euclidean}\n')
+        rep_data.write(f'l1: {l1}\n')
+        rep_data.write(f'l2: {l2}\n')
+        rep_data.write(f'manhattan: {manhattan}\n')
+
+
+    #df = pd.DataFrame.from_dict(report)
+    #df.to_csv(f'{out_root}/silhouttte_compress.csv')
+    
 
 # TSNE related features 
 def compute_iou(mask1, mask2):
@@ -119,6 +183,10 @@ class GeneratEmbedFeatures:
         if not os.path.exists(self.out_root):
             os.makedirs(self.out_root, exist_ok=True)
         folds = os.listdir(self.data_root)
+        #folds.remove('ImageNet')
+        #folds.remove('COCO')
+        #folds.remove('Kule_tirkidi_marc_2017')
+        print(len(folds), '<--> length of folds')
 
         sit_ind = []
         fname = []
@@ -131,26 +199,28 @@ class GeneratEmbedFeatures:
             print(f'processing for folder {fold}')
             path = os.path.join(self.data_root, fold)
             paths = glob(path + '/*{}'.format(self.format))
-            if len(paths) == 0:
-                pass
-            else:
-                sit_ind+=[i]*len(paths)
-                imgs = np.array([np.load(aa).ravel() for aa in paths])
+            #if len(paths) == 0:
+            #    print(f'folder empty')
+            #else:
+                #sit_ind+=[i]*len(paths)
+                #imgs = np.array([np.load(aa).ravel() for aa in paths])
+            imgs = np.vstack([np.load(aa) for aa in paths])
+            sit_ind+=[i]*len(imgs)
                 # imgs = torch.from_numpy(imgs)
                 # outs = run_batch(imgs, 10, self.model) #model(imgs)
-                print(f'Output shape for folder: {fold}, input shape:{imgs.shape}')
-                array.append(imgs)
-                fname.append(fold)
-                length.append(imgs.shape[0])
-        npyy = np.concatenate(array, axis=0)
+            print(f'Output shape for folder: {fold}, input shape:{imgs.shape}')
+            array.append(imgs)
+            fname.append(fold)
+            length.append(imgs.shape[0])
+        npyy = np.vstack(array) # np.concatenate(array, axis=0)
 
         # npyy = big_array.numpy()
         assert len(sit_ind) == npyy.shape[0], 'Site index length and array length not matching'
 
         np.save(self.out_root + '/deep_features', npyy)
         np.save(self.out_root + '/site_index', sit_ind)
-        print(f'deep features written in {self.out_root}')
-        print(f'Site index written in {self.out_root}')
+        print(f'deep features written in {self.out_root},with shape: {npyy.shape}')
+        print(f'Site index written in {self.out_root}, with length: {len(sit_ind)}')
 
         inds = list(np.unique(sit_ind))
 
@@ -166,13 +236,13 @@ class GeneratEmbedFeatures:
         tsne = TSNE(n_components=2,
                     init='pca',
                     perplexity=50,
-                    n_iter=5000,
+                    n_iter=1000,
                     n_jobs=-1).fit_transform(npyy)
 
         np.save(self.out_root + '/tsne_out', tsne)
-        print(f'TSNE features written in {self.out_root}')
-        print(f'Feature space comutation done!')
-        if len(sit_ind) !=tsne.shape[0]:
+        print(f'TSNE features written in {self.out_root}, with shape: {tsne.shape}')
+        print(f'Feature space computation done!')
+        if len(sit_ind) != tsne.shape[0]:
             print(f'Warning, TSNE FEATURE AND INDEX DID NOT MATCH')
     
     def plot_joint_feature_space(self):
@@ -199,11 +269,11 @@ class GeneratEmbedFeatures:
             colors_camps[i] = np.array(palette[i])
 
 
-        figfigfig, axaxax = plt.subplots(2,5,sharex=True, sharey=True, figsize=(15,9))
+        figfigfig, axaxax = plt.subplots(2,6,sharex=True, sharey=True, figsize=(15,9))
 
         for i, camp in enumerate(sites):
             print(camp)
-            id_x, id_y = i//5, i%5
+            id_x, id_y = i//6, i%6
             d = data[campcolor==i]
             d2 = data[campcolor!=i]
             x, y = d[:,0], d[:,1]
@@ -214,38 +284,40 @@ class GeneratEmbedFeatures:
             xmin, xmax = data[:, 0].min(), data[:,0].max()  # chack
             ymin, ymax = data[:, 1].min(), data[:,1].max()  # chack
 
-            print('computing SVM')
+            print(f'computing SVM for --> {camp}')
+            print(f'Xmin: {xmin}, Xmax: {xmax}')
 
             algorithm = svm.OneClassSVM(nu=.2,kernel="rbf", gamma=0.01)
             print('SVM done')
 
             xx, yy = np.meshgrid(np.linspace(xmin-2, xmax+2, 400), np.linspace(ymin-2, ymax+2, 400)) 
 
-
-            inliers = algorithm.fit(d).predict(d)
-            Z = algorithm.predict(np.c_[xx.ravel(), yy.ravel()])
+            try:
+                inliers = algorithm.fit(d).predict(d)
+                Z = algorithm.predict(np.c_[xx.ravel(), yy.ravel()])
 
             # This plots all the points in a gray cloud
-            axaxax[id_x,id_y].scatter(x2, y2, c='gray', s=.9, label=camp, alpha=.5, marker='o')
+                axaxax[id_x,id_y].scatter(x2, y2, c='gray', s=.9, label=camp, alpha=.5, marker='o')
 
-            df = algorithm.decision_function(np.c_[xx.ravel(), yy.ravel()])
-            df = df.reshape(xx.shape)
-            Z = Z.reshape(xx.shape)
+                df = algorithm.decision_function(np.c_[xx.ravel(), yy.ravel()])
+                df = df.reshape(xx.shape)
+                Z = Z.reshape(xx.shape)
 
             # This plots the points and surfaces site by site
-            axaxax[id_x,id_y].contourf(xx, yy, df, levels=[-.9, df.max()], colors=color, alpha = .3) # alpha .6
-            axaxax[id_x,id_y].scatter(x,y,c=color, s=1, label=camp,
+                axaxax[id_x,id_y].contourf(xx, yy, df, levels=[-.9, df.max()], colors=color, alpha = .3) # alpha .6
+                axaxax[id_x,id_y].scatter(x,y,c=color, s=1, label=camp,
                        alpha=1, marker='o')
-            axaxax[id_x, id_y].set_title(sites_names[i], fontdict={'family':'serif', 'fontsize': 11,
+                axaxax[id_x, id_y].set_title(sites_names[i], fontdict={'family':'serif', 'fontsize': 11,
                 'fontweight' : 'normal',
                 'verticalalignment': 'baseline',
                 'horizontalalignment': 'center'}, pad=2.5)
 
-            plt.setp( axaxax[id_x,id_y].get_xticklabels(), visible=False)
-            plt.setp( axaxax[id_x, id_y].get_yticklabels(), visible=False)
-            plt.xticks([]),plt.yticks([])
-
-            plt.subplots_adjust(hspace=0.2)
+                plt.setp( axaxax[id_x,id_y].get_xticklabels(), visible=False)
+                plt.setp( axaxax[id_x, id_y].get_yticklabels(), visible=False)
+                plt.xticks([]),plt.yticks([])
+            except:
+                pass
+        plt.subplots_adjust(hspace=0.2)
 
         plt.savefig(os.path.join(self.out_root,'vgg19-tsne-site-colors.png'), format='png', bbox_inches='tight')
 
@@ -276,8 +348,8 @@ class GeneratEmbedFeatures:
 
 
         figfigfig, axaxax = plt.subplots(figsize=(10,10)) # 2,5,sharex=True, sharey=True,
-        markers = ['o', '*', '^','<','>','v','p','+','d','1']
-        cm_list = ["#FF00FF","#8A2BE2","#00FF00","#00FFFF","#0000FF","#000080","#DAA520","#2F4F4F","#FFD700","#FF0000"] 
+        markers = ['o', '*', '^','<','>','v','p','+','d','1','2','3']
+        cm_list = ["#FF00FF","#8A2BE2","#00FF00","#00FFFF","#0000FF","#000080","#DAA520","#2F4F4F","#FFD700","#FF0000","FBDD7E","A52A2A"] 
 
         for i, camp in enumerate(sites):
             print(camp)
@@ -292,27 +364,34 @@ class GeneratEmbedFeatures:
             xmin, xmax = data[:, 0].min(), data[:,0].max()  # chack
             ymin, ymax = data[:, 1].min(), data[:,1].max()  # chack
 
-            print('computing SVM')
+            print(f'computing SVM for --> {camp}')
+            print(f'xmin: {xmin}, xmax: {xmax}, ymin: {ymin}, ymax: {ymax}')
 
             algorithm = svm.OneClassSVM(nu=.2,kernel="rbf", gamma=0.01)
             print('SVM done')
 
             xx, yy = np.meshgrid(np.linspace(xmin-2, xmax+2, 400), np.linspace(ymin-2, ymax+2, 400)) 
-
-
-            inliers = algorithm.fit(d).predict(d)
-            Z = algorithm.predict(np.c_[xx.ravel(), yy.ravel()])
-
+            print(f'yes 1  hape of D: {d.shape}')
+            try:
+                inliers = algorithm.fit(d).predict(d)
+                print('yes 2')
+                Z = algorithm.predict(np.c_[xx.ravel(), yy.ravel()])
+                print('yes 3')
             # This plots all the points in a gray cloud
             # axaxax[id_x,id_y].scatter(x2, y2, c='gray', s=.9, label=camp, alpha=.5, marker='o')
 
-            df = algorithm.decision_function(np.c_[xx.ravel(), yy.ravel()])
-            df = df.reshape(xx.shape)
-            Z = Z.reshape(xx.shape)
-
+                df = algorithm.decision_function(np.c_[xx.ravel(), yy.ravel()])
+                print('yes 4')
+                df = df.reshape(xx.shape)
+                print('yes 5')
+                Z = Z.reshape(xx.shape)
+                print('yes 6')
             # This plots the points and surfaces site by site
             # axaxax.contourf(xx, yy, df, levels=[-.9, df.max()], colors=cm_list[i], alpha = .3) # alpha .6
-            axaxax.scatter(x,y,c=cm_list[i], s=5, label=camp, alpha=1, marker=markers[i])
+                axaxax.scatter(x,y,c=cm_list[i], s=5, label=camp, alpha=1, marker=markers[i])
+                print('yes 7')
+            except:
+                pass
             # axaxax[id_x, id_y].set_title(sites_names[i], fontdict={'family':'serif', 'fontsize': 11,
             #     'fontweight' : 'normal',
             #     'verticalalignment': 'baseline',
@@ -320,8 +399,8 @@ class GeneratEmbedFeatures:
 
         plt.setp(axaxax.get_xticklabels(), visible=False)
         plt.setp(axaxax.get_yticklabels(), visible=False)
-        plt.ylabel('PCA-1')
-        plt.xlabel('PCA-2')
+        plt.ylabel('Features-1')
+        plt.xlabel('Features-2')
         plt.xticks([]),plt.yticks([])
         plt.subplots_adjust(hspace=0.2)
         plt.legend()
@@ -622,11 +701,16 @@ class GeneratEmbedFeatures:
             plt.legend()
             plt.savefig("{}/combined_feature_space.png".format(self.out_root))
             plt.show()
+    def conputeSilhottte(self,data='tsne'):
+        if data == 'full':
+            computeSilhoteFull(in_root=self.data_root, out_root=self.out_root)
+        else:
+            computeSilhoteCompress(out_root=self.out_root)
 
 def argumentParser():
     parser = argparse.ArgumentParser(description = 'Deep feature space embeding plot')
-    parser.add_argument('--data_root', help='data folder, can be either with single task or multi task', type=str, required=False, default='D:/DATA/MVCamp/FEATURSPACE_all_anneal/features')
-    parser.add_argument('--save_dir', help = 'main root to save the test result', type = str, required=False, default='D:/DATA/MVCamp/FEATURSPACE_all_anneal/PLOTS')
+    parser.add_argument('--data_root', help='data folder, can be either with single task or multi task', type=str, required=False, default='/home/getch/ssl/ALL_FEAT')
+    parser.add_argument('--save_dir', help = 'main root to save the test result', type = str, required=False, default='/home/getch/ssl/ALL_TSNE')
     
     arg = parser.parse_args()
     return arg
@@ -641,3 +725,4 @@ if __name__ == "__main__":
     generator.compute_simmilarity()
     generator.compute_simmilarity_GIOU()
     generator.crossfeature_space_plot()
+    generator.conputeSilhottte(data='tsne')
