@@ -33,7 +33,7 @@ def plotOptimize():
         plt.xlabel('Epochs')
         plt.ylabel('Test performance(ROCAUC)')
         plt.legend()
-        plt.savefig('D:/DATA/Minawao_june_2016/optimized_fig_smoth1.png', dpi=350, bbox_inches='tight')
+        plt.savefig('/optimized_fig_smoth1.png', dpi=350, bbox_inches='tight')
 #         plt.show()
         
 if __name__ == "__main__":
