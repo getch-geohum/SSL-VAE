@@ -16,3 +16,7 @@ sh ae_test.sh
 ```
 
 where specific parameters could be changed after opening the files
+for feature space plot 
+```
+python automate_feature_space_plot.py --data_root ./root2data --save_dir ./root2save
+```
