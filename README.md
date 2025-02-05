@@ -5,8 +5,6 @@ This is the implementation of code used for [Self-Supervised Variational Autoenc
 
 ## Usage
 
-## USAGE 
-
 To train a model
 ```
 sh ae_train.sh
