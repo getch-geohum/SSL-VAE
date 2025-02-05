@@ -15,8 +15,8 @@ do
     		--lamda=0.9\
     		--nb_channels=4\
     		--params_id=100\
-    		--dst_dir=D:/DATA/outsdata_ssae/$dir\
-    		--data_dir=D:/DATA/rawdata/$dir\
+    		--dst_dir=/path2save/$dir\
+    		--data_dir=/path2data/$dir\
     		--with_mask\
     		--with_prob\
     		--save_preds\
