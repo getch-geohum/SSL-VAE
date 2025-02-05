@@ -57,7 +57,7 @@ class SSVAE(nn.Module):
             *self.encoder_layers,
         )
         self.final_encoder = nn.Sequential(
-            nn.Conv2d(128, self.z_dim * 2, kernel_size=1,
+            nn.Conv2d(self.max_depth_conv, self.z_dim * 2, kernel_size=1,
             stride=1, padding=0)
         ) # self.max_depth_conv  repace 2048   128
 
@@ -147,7 +147,7 @@ class SSVAE(nn.Module):
         logvar_ = self.logvar * beta
         return 0.5 * torch.sum(
                 (1 + logvar_ - mu_ - logvar_.exp()),
-            dim=(1)#, 2, 3)
+            dim=(1,2,3)#, 2, 3)
         )
 
     def kld(self): # kld loss without mask
@@ -167,14 +167,15 @@ class SSVAE(nn.Module):
         # A beta coefficient that will be pixel wise and that will be bigger
         # for pixels of the mask which are very different between the original
         # and modified version of x
-        gamma = Mn #self.beta + Mm * torch.abs(xm - x)
-        beta = Mn # Mm * torch.abs(xm - x)
-        beta_inv = Mm
-        for i in range(self.nb_conv):
-            beta = nn.functional.max_pool2d(beta, 2)
-            beta_inv = nn.functional.max_pool2d(beta_inv, 2)
-        beta = torch.mean(beta, axis=1)[:, None]
-        beta_inv = torch.mean(beta_inv, axis=1)[:, None]
+        
+        #gamma = Mn #self.beta + Mm * torch.abs(xm - x)
+        #beta = Mn # Mm * torch.abs(xm - x)
+        #beta_inv = Mm
+        #for i in range(self.nb_conv):
+        #    beta = nn.functional.max_pool2d(beta, 2)
+        #    beta_inv = nn.functional.max_pool2d(beta_inv, 2)
+        #beta = torch.mean(beta, axis=1)[:, None]
+        #beta_inv = torch.mean(beta_inv, axis=1)[:, None]
         #print(f'beta shape: {beta.shape}')
         #plt.imshow(beta[0, 0].cpu().numpy())
         #plt.savefig("mask.png")
@@ -186,16 +187,40 @@ class SSVAE(nn.Module):
         #kld = torch.mean(self.kld_m(beta=beta)) # mean over the batch
         #kld_inv = torch.mean(self.kld_m(beta=beta_inv))
 
-        base = 256*256
-        lambda_ = 0.9
-        w_n = torch.sum(Mn[:,0,:,:],dim=(1,2))/base # [batch_n,] weight to balance contribution from unmodified region
-        w_m = torch.sum(Mm[:,0,:,:],dim=(1,2))/base # [batch_n,] weight to balance contribution from modified region
+        #base = 256*256
+        #lambda_ = 0.9
+        #w_n = torch.sum(Mn[:,0,:,:],dim=(1,2))/base # [batch_n,] weight to balance contribution from unmodified region
+        #w_m = torch.sum(Mm[:,0,:,:],dim=(1,2))/base # [batch_n,] weight to balance contribution from modified region
 
         #print(f'wn:{w_n} \n w_m: {w_m}')
 
-        rec_normal = torch.mean(torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mn),dim=(1,2))*w_n)
-        rec_modified = torch.mean(torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mm),dim=(1,2))*w_m)
-        rec_term = lambda_*rec_normal+(1-lambda_)*rec_modified  # just to follow Boers work
+        #rec_normal = torch.mean(torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mn),dim=(1,2))*w_n)
+        #rec_modified = torch.mean(torch.mean(self.xent_continuous_ber(recon_x, x, gamma=Mm),dim=(1,2))*w_m)
+        #rec_term = lambda_*rec_normal+(1-lambda_)*rec_modified  # just to follow Boers work
+
+
+
+
+
+        base = 256 * 256
+        base = x.shape[0]
+        lambda_ = 1     # start with lambda = 1, maybe modify it later
+        w_n = (
+            torch.sum(Mn[:, 0, :, :], dim=(0)) / base
+         )  # [batch_n,]
+        w_m = (
+            torch.sum(Mm[:, 0, :, :], dim=(0)) / base
+         )  # [batch_n,]
+
+        rec_normal = torch.mean(
+            self.xent_continuous_ber(recon_x, x, gamma=Mn) + torch.log(w_n[None]))
+        
+        rec_modified = torch.mean(
+            self.xent_continuous_ber(recon_x, x, gamma=Mm) + torch.log(1-torch.clip(w_m,0.001,0.999)))
+        rec_term = (
+           rec_normal + (2 - lambda_) * rec_modified
+           ) # when lamda is 1, 2-lamda :))
+
         kld = torch.mean(self.kld())
 
         # print(f'normal: {rec_normal.item()}, rec_mod: {rec_modified.item()}; rec_term: {rec_term.item()}; kld_term: {kld.item()}')
@@ -236,7 +261,8 @@ class SSVAE(nn.Module):
 
 
     def step(self, inputs): # inputs contain, modified image, normal image and mask
-        X, Xm, M, Mn = inputs
+        #print('The length of prepared inputs:--> ',len(inputs))
+        X, Xm, M, Mn,_ = inputs
         rec, _ = self.forward(Xm)
 
         loss, loss_dict = self.compute_loss(x=X, xm=Xm, Mm=M, Mn=Mn, recon_x=rec)

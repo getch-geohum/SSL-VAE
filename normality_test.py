@@ -55,10 +55,14 @@ def compareHistogram(root, out_root, z_dim=18,save=True):
         ax[j].hist(ARS_a, bins=2000, histtype = 'step', color='lime', label='Classical VAE')
         ax[j].hist(ARS_b, bins=2000, histtype = 'step', color='blue', label='VAE with latent space conditioning')
         ax[j].set_title(names[j])
+        
 
-        print(f'mu1 {mu_a}, std1 {std_a}, mu2 {mu_b},std2 {std_b}')
+        #print(f'mu1 {mu_a}, std1 {std_a}, mu2 {mu_b},std2 {std_b}')
         ax[j].text(0.45, 0.95,r'$\mu=${:0.3f}'.format(mu_a) + " " + r'$\sigma=${:0.3f}'.format(std_a), horizontalalignment='center', verticalalignment='center', transform=ax[j].transAxes, color='lime')
         ax[j].text(0.45, 0.9,r'$\mu=${:0.3f}'.format(mu_b) + " " + r'$\sigma=${:0.3f}'.format(std_b), horizontalalignment='center', verticalalignment='center', transform=ax[j].transAxes,color='blue')
+    ax[0].set_ylabel('Frequency')
+    fig.text(0.5, 0, 'Latent space logits', ha='center')
+    #fig.text(0.04, 0.5, 'common Y', va='center', rotation='vertical')
     plt.subplots_adjust(wspace=0.001, hspace=0.001)
     handles, labels = ax[0].get_legend_handles_labels()
     fig.legend(handles,labels, loc='upper center', ncol=2, fontsize=10, bbox_to_anchor=(0.5,1.050))

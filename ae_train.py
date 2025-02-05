@@ -44,7 +44,7 @@ def train(model, train_loader, device, optimizer, betas, c_epoch, txtt, schedule
             loss, rec_im, loss_dict_new = model.step((a, b, c, d))
 
             loss.backward()
-        elif type(model) is VAE: # added new 
+        elif type(model) is VAE or type(model) is VAE_LIU: # added new to accommodate liu vae 
             loss, rec_im, loss_dict_new = model.step(a)
             (-loss).backward()
         elif (
@@ -53,6 +53,7 @@ def train(model, train_loader, device, optimizer, betas, c_epoch, txtt, schedule
             or type(model) is SS_CVAEmvtec
         ):
             loss, rec_im, loss_dict_new = model.step((a, b, c, d, e))
+            (-loss).backward()
         elif type(model) is DIS_SSVAE:
             loss, rec_im, loss_dict_new = model.step((a, b, c, d, e, lbl))
 
@@ -69,12 +70,16 @@ def train(model, train_loader, device, optimizer, betas, c_epoch, txtt, schedule
                 f" {loss_dict_new['beta*kld'].item()} |rec:"
                 f" {loss_dict_new['rec_term'].item()} |dis_loss:{loss_dict_new['dis_loss'].item()}, |total: {loss_dict_new['loss'].item()}|"
             )
-        else:
+        elif type(model) is SSAE:
+             txtt.write(f"{loss_dict_new['normal'].item()},{loss_dict_new['modified'].item()},{loss_dict_new['total'].item()}\n")
+             print(f"|normal|{loss_dict_new['normal'].item()}|modified |{loss_dict_new['modified'].item()}|total|{loss_dict_new['total'].item()}|")
+
+        else: # includes li_vae
             txtt.write(
-                f"{loss_dict_new['kld']},{loss_dict_new['beta*kld'].item()},{loss_dict_new['rec_term'].item()},{loss_dict_new['loss'].item()}\n"
+                f"{loss_dict_new['beta*kld'].item()},{loss_dict_new['rec_term'].item()},{loss_dict_new['loss'].item()}\n"
             )
             print(
-                f"Ep: {c_epoch + 1} --> |kld: {loss_dict_new['kld'].item()} |b*kld: {loss_dict_new['beta*kld'].item()} |rec: {loss_dict_new['rec_term'].item()} |total: {loss_dict_new['loss'].item()}|"
+                f"Ep: {c_epoch + 1} --> |b*kld: {loss_dict_new['beta*kld'].item()} |rec: {loss_dict_new['rec_term'].item()} |total: {loss_dict_new['loss'].item()}|"
             )
 
         loss_dict = update_loss_dict(
@@ -106,6 +111,7 @@ def eval(model, test_loader, device, with_mask=False):
         or type(model) is SS_CVAEmvtec
         or type(model) is DIS_SSVAE
         or type(model) is VAE # added
+        or type(model) is VAE_LIU
     ):
         if with_mask:
             recon_mb, _ = model(input_mb)

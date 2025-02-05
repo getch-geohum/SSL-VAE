@@ -185,6 +185,11 @@ def toFloat(x):
     return x.float()
 
 
+def clip_values(arr, min_=0.03, max_=0.97):
+    a = np.quantile(arr, min_)
+    b = np.quantile(arr, max_)
+    return np.clip(arr, a, b)
+
 class TrainDataset(Dataset):
     def __init__(
         self,
@@ -379,7 +384,7 @@ class TrainDataset(Dataset):
                 msk[:, :, 0] == 1,
                 np.sum(msk[:, :, 0]) / (256 * 256),
                 1 - (np.sum(msk[:, :, 0]) / (256 * 256)),
-            )  # this P which is teh probability of a pixel being 0 or 1
+            )  # this P which is the probability of a pixel being 0 or 1
             p = np.dstack(
                 [p] * self.nb_channels
             )  # duplicate channels for element wise multiplication
@@ -533,6 +538,7 @@ class TestDataset(Dataset):
 
     def __getitem__(self, index):
         img = self.image_array[index]
+        img = clip_values(img)
         lbl = self.lbl_array[index]
         if not self.with_mask:
             return (

@@ -11,6 +11,7 @@ import argparse
 import os
 from glob import glob
 from sklearn.mixture import GaussianMixture
+import cv2
 
 def MASK2PASCAL(MASK, min_area=4, with_score=False):
     contours = measure.find_contours(MASK, 0.5)
@@ -74,12 +75,18 @@ def MASK2PASCAL(MASK, min_area=4, with_score=False):
 
 
 class Segmenter:
-    def __init__(self, root=None, num_class=2, min_area=6, score='amap', iou_type='segm'):
+    def __init__(self, root=None, num_class=2, min_area=6, score='amap', iou_type='segm',smooth=False, iteration=3, kernel=3):
         self.root = root
         self.score = score
         self.num_class = num_class
         self.min_area = min_area
-        self.score_maps = sorted(glob(f'{self.root}/*_{score}.png'))
+        self.smooth = smooth
+        self.iteration = iteration
+        self.kernel = kernel
+        if score == 'mads':
+            self.score_maps = sorted(glob(f'{self.root}/*_{score}_copy.png'))
+        else:
+            self.score_maps = sorted(glob(f'{self.root}/*_{score}.png'))
         self.ground_truth = sorted(glob(f'{self.root}/*_gt.png'))
 
         assert len(self.score_maps) == len(self.ground_truth), f'score maps and ground truth {len(self.score_maps)} and {len(self.ground_truth)} respectively is not equal'
@@ -100,27 +107,36 @@ class Segmenter:
         RC = []
         PC = []
 
-        for pair in files:
-            A = imread(pair[0])
-            G = imread(pair[1])
+        try:
 
-            p_mask = self.model.predict(A.reshape(-1,3))
-            p_mask = p_mask.reshape(A.shape[0], A.shape[1])
-            count = np.unique(p_mask, return_counts=True)
-            vals = [count[1][0]/count[1].sum(), count[1][1]/count[1].sum()]
+            for pair in files:
+                A = imread(pair[0])
+                G = imread(pair[1])
 
-            if vals[1] > 0.7:  # for images with emty background, just to control unnecessary confusion
-                pass
-            else:
-                rf = MASK2PASCAL(MASK=G, min_area=self.min_area, with_score=False)
-                pr = MASK2PASCAL(MASK=p_mask, min_area=self.min_area, with_score=True)
+                p_mask = self.model.predict(A.reshape(-1,3))
+                p_mask = p_mask.reshape(A.shape[0], A.shape[1])
 
-                REF.append(rf[0])
-                PRE.append(pr[0])
-                RC.append(rf[1])
-                PC.append(pr[1])
-                print(f'Ref --> {rf[1]} Pred --> {pr[1]}')
+                stat = np.unique(p_mask, return_counts=True)
+                if stat[1][0]<stat[1][1]:
+                    p_mask = 1-p_mask
+                kernel_ = np.ones((self.kernel,self.kernel),np.uint8)
+                if self.smooth:
+                    p_mask = cv2.morphologyEx(p_mask.astype(np.uint8),cv2.MORPH_OPEN,kernel_, iterations = self.iteration)
+                vals = [stat[1][0]/stat[1].sum(), stat[1][1]/stat[1].sum()]
 
+                if vals[1] > 0.8:  # for images with emty background, just to control unnecessary confusion
+                    pass
+                else:
+                    rf = MASK2PASCAL(MASK=G, min_area=self.min_area, with_score=False)
+                    pr = MASK2PASCAL(MASK=p_mask, min_area=self.min_area, with_score=True)
+
+                    REF.append(rf[0])
+                    PRE.append(pr[0])
+                    RC.append(rf[1])
+                    PC.append(pr[1])
+                    print(f'Ref --> {rf[1]} Pred --> {pr[1]}')
+        except:
+            pass
         self.preds = PRE
         self.refs = REF
         self.rc = RC
@@ -137,8 +153,10 @@ class Segmenter:
             os.makedirs(out_root, exist_ok=True)
 
         np.save(f'{out_root}/{self.score}_reff_count.npy', np.array(self.rc))
-        np.save(f'{out_root}/{self.score}_pred_count.npy', np.array(self.pc))
-
+        if self.score == 'mads':
+            np.save(f'{out_root}/{self.score}_pred_count_copy.npy', np.array(self.pc))
+        else:
+            np.save(f'{out_root}/{self.score}_pred_count.npy', np.array(self.pc))
         keys = ['map', 'map_50', 'map_75', 'map_small', 'map_medium', 'map_large', 'ref_count', 'pred_count']
         with open(f'{out_root}/{self.score}_metric.txt', 'a') as txt:
             txt.write(f'===================== \n')
@@ -151,35 +169,96 @@ class Segmenter:
                     txt.write(f'{key}, {self.results[key].item()} \n') # mean average precision
 
 
-
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", help="root folder where files exist", type=str, required=False)
-    parser.add_argument("--out_root", help="root folder where files will be saved", type=str, required=False)
+    parser.add_argument("--out_root", help="root folder where files will be saved", type=str, required=False,default='/home/getch/COUNT_ops_all')
     parser.add_argument("--num_class", type=int, default=2)
     parser.add_argument("--min_area",help="The minimum area to define objectness", default=6, type=int)
-    parser.add_argument("--score",help="Anomaly score either amap, mads or mads_copy",type=str)
+    parser.add_argument("--score",help="Anomaly score either amap, mads or mads_copy",type=str, default='amap')
     parser.add_argument("--iou_type",help="iou measurement type either segm or bbox",type=str, default="segm")
+    parser.add_argument("--iteration", type=int, default=2)
+    parser.add_argument("--kernel", type=int, default=3)
+    parser.add_argument("--smooth", help="Whether to run morphological operation or not",dest="smooth", action="store_true")
     return parser.parse_args()
-
-
 
 
 if __name__ == "__main__":
     args = parse_args()
-    for folder in os.listdir(f'{args.root}/predictions'):
-        print(f'Predicting for folder: {folder}')
-        root = f'{args.root}/predictions/{folder}'
-        out_root = f'{args.out_root}/{folder}'
-        #if folder in ['Tza_oct_2016']:
-        segmenter = Segmenter(root=root,
-                              num_class=args.num_class,
-                              min_area=args.min_area,
-                              score=args.score,
-                              iou_type=args.iou_type)
-        segmenter.fitModel()
-        segmenter.segmentCount()
-        segmenter.computeMetrics()
-        segmenter.summurizeReport(out_root=out_root)
+
+    #roots = ['/home/getch/ssl/SSL_VAE/vae',
+    #        '/home/getch/ssl/SSL_VAE/sslcvae',
+    #        '/home/getch/ssl/SSL_VAE/dis_ssvae',
+    #        '/home/getch/ssl/SSL_VAE/ssvae_l0_1r',
+    #        '/home/getch/ssl/SSL_VAE/dis_ssvae_l0_1r',
+    #        '/home/getch/ssl/SSL_VAE/ssvae_l0_1_',
+    #        '/home/getch/ssl/SSL_VAE/dis_ssvae_l0_1_']
+    #roots = ['/home/getch/ssl/SSL_VAE/ssvae_l0_1r',
+    #        '/home/getch/ssl/SSL_VAE/dis_ssvae_l0_1r',
+    #        '/home/getch/ssl/SSL_VAE/ssvae_l0_1_',
+    #        '/home/getch/ssl/SSL_VAE/dis_ssvae_l0_1_']
+    #roots = [f'/home/getch/ssl/SSL_VAE_only4/{fold}' for fold in os.listdir('/home/getch/ssl/SSL_VAE_only4/')]
+    #print(roots)
+    rootss = ['/home/getch/ssl/SSL_VAE/dis_ssvae',
+            '/home/getch/ssl/SSL_VAE/dis_ssvae_l0_1r',
+            '/home/getch/ssl/SSL_VAE/dis_ssvae_l0_1_',
+            '/home/getch/ssl/SSL_VAE/dis_ssvae_l0_1r',
+            '/home/getch/ssl/SSL_VAE/dis_ssvae_l0_1_',
+            '/home/getch/ssl/SSL_VAE_only4/dis_ssvae',
+            '/home/getch/ssl/SSL_VAE_only4/dis_ssvae_l',
+            '/home/getch/ssl/SSL_VAE_only4/dis_ssvae+ll32',
+            '/home/getch/ssl/SSL_VAE_only4/dis_ssvae+l',
+            '/home/getch/ssl/SSL_VAE_only4/dis_ssvae+ll'
+            #'/home/getch/ssl/SSL_VAE_only4/dis_ssvae_median_1side_l09_',
+            #'/home/getch/ssl/SSL_VAE_only4/dis_ssvae_median_1side_l2+',
+            #'/home/getch/ssl/SSL_VAE_only4/dis_ssvae_median_2side_l09',
+            #'/home/getch/ssl/SSL_VAE_only4/dis_ssvae_median_1side_l09',
+            #'/home/getch/ssl/SSL_VAE_only4/dis_ssvae_median_1side_l1_',
+            #'/home/getch/ssl/SSL_VAE_only4/dis_ssvae_median_1side_l2_',
+            #'/home/getch/ssl/SSL_VAE_only4/dis_ssvae_median_2side_l09_'
+            ]
+
+    roots = ['/home/getch/ssl/LUVAE_rev']
+            #'/home/getch/ssl/SSLAE_rev']
+
+    for score_ in ['amap']:  # 'mads']:
+        for big_root in roots:
+            for folder in os.listdir(f'{big_root}/predictions'):
+                ex_name = os.path.split(big_root)[1]
+                print(f'Predicting for folder: {folder} in {ex_name}')
+                root = f'{big_root}/predictions/{folder}'
+                out_root = f'/home/getch/ssl/SSL_VAE_only4_FEAT_MEDIAN_re/{ex_name}/{folder}'
+                segmenter = Segmenter(root=root,
+                                  num_class=args.num_class,
+                                  min_area=args.min_area,
+                                  score=score_,
+                                  iou_type=args.iou_type,
+                                  smooth=True,
+                                  iteration=args.iteration,
+                                  kernel=args.kernel)
+                if folder not in ['1','1']:
+                    #try:
+                    segmenter.fitModel()
+                    segmenter.segmentCount()
+                    segmenter.computeMetrics()
+                    segmenter.summurizeReport(out_root=out_root)
+                    #except:
+                    print(f'computed for {folder}')
+
+    # for folder in os.listdir(f'{args.root}/predictions'):
+    #     ex_name = os.path.split(args.root)[1]
+    #     print(f'Predicting for folder: {folder}')
+    #     root = f'{args.root}/predictions/{folder}'
+    #     out_root = f'{args.out_root}/{ex_name}/{folder}'
+    #     #if folder in ['Tza_oct_2016']:
+    #     segmenter = Segmenter(root=root,
+    #                           num_class=args.num_class,
+    #                           min_area=args.min_area,
+    #                           score=args.score,
+    #                           iou_type=args.iou_type)
+    #     segmenter.fitModel()
+    #     segmenter.segmentCount()
+    #     segmenter.computeMetrics()
+    #     segmenter.summurizeReport(out_root=out_root)
 
 
