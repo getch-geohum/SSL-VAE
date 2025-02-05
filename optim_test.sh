@@ -18,8 +18,8 @@ do
     			--lamda=0.9\
     			--nb_channels=4\
     			--params_id=$i\
-    			--dst_dir=D:/DATA/Minawao_june_2016_0_$j\
-    			--data_dir=D:/DATA/rawdata/Minawao_june_2016\
+    			--dst_dir=/path2save$j\
+    			--data_dir=/path2data\
     			--with_mask\
     			--with_prob\
     			#--save_preds\
