@@ -22,9 +22,13 @@ python automate_feature_space_plot.py --data_root ./root2data --save_dir ./root2
 ```
 
 This repository also contains re-impkementations of the following research works whose re-implkementations are reported for specific task in our study
-- [PaDiM: A patch distribution modeling framework for anomaly detection and localization](https://doi.org/10.1007/978-3-030-68799-1_35)
+- [PaDiM: A patch distribution modeling framework for anomaly detection and localization](https://doi.org/10.1007/978-3-030-68799-1_35) where the core implementation is forked from [codebase](https://github.com/xiahaifeng1995/PaDiM-Anomaly-Detection-Localization-master/tree/main) and adapted to our specific dataset
   ```
   python reimplementation/PADIM_all.py ----save_path /path2save --root /path2data --arch wide_resnet50_2
+  ```
+- [Sub-Image Anomaly Detection with Deep Pyramid Correspondences](https://arxiv.org/pdf/2005.02357) whose implementation is forked from [codebase](https://github.com/byungjae89/SPADE-pytorch/tree/master)
+  ```
+  python reimplementation/SPADE_all.py --top_k 5 --save_path /path2data --root /root2data
   ```
 - [Counting sea lions and elephants from aerial photography using deep learning with density map](https://doi.org/10.1186/s40317-021-00247-x)
   
