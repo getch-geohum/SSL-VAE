@@ -1,6 +1,6 @@
 python normality_test.py\
-	--root=D:/DATA/MVCamp_dis\
-    	--out_root=D:/DATA/FEATURE_SPACE_PLOTS\
+	--root=path2data\
+    	--out_root=/path2plotsave\
     	--name=vae\
     	--z_dim=36\
     	--plot_type=compare\
