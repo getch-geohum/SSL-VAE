@@ -1,6 +1,4 @@
 #!/bin/bash
-#for fold in carpet grid leather tile wood all
-#do
 python ae_train.py\
 	--model=liu_vae\
 	--exp=liu_vae\
@@ -27,21 +25,4 @@ python ae_train.py\
 	--with_prob\
 	--liu_vae\
 	
-    #--with_condition\
-	#--anneal_beta\
-	#--anneal_cyclic\
-	#--min_beta=0\
-    #--cycle=6\
-    #--ratio=0.5\
-
-    # 
-# outputs_34full_m4mm_mean_mask_m+
-
-#done
-# dataset could be either "camp" or "mvtec"
-# --ndvi_treshold=0.1\
-# --intensity_treshold=145\
-# --brightness_treshold=0\
-# --contrast_treshold=0\
-# --func=NDVI\
-# --equalize\
+   
