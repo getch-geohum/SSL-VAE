@@ -15,8 +15,8 @@ python ae_test.py\
     	--lamda=0.9\
     	--nb_channels=4\
     	--params_id=100\
-    	--dst_dir=/home/getch/ssl/SSLAE_rev\
-    	--data_dir=/home/getch/DATA/VAE/data\
+    	--dst_dir=/path2save\
+    	--data_dir=/path2data\
 	--data=$fold\
     	--dataset=camp\
 	--texture=carpet\
