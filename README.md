@@ -37,3 +37,15 @@ This repository also contains re-impkementations of the following research works
   ```
 - [Self-supervised training with autoencoders for visual anomaly detection](https://arxiv.org/abs/2206.11723) which is implemented in the main function within a file [AE.py](https://github.com/getch-geohum/SSL-VAE/blob/master/AE.py)
 - [Towards visually explaining variational autoencoders](https://openaccess.thecvf.com/content_CVPR_2020/papers/Liu_Towards_Visually_Explaining_Variational_Autoencoders_CVPR_2020_paper.pdf) which is implemented in the main training function [liu_vae.py](https://github.com/getch-geohum/SSL-VAE/blob/master/liu_vae.py)
+
+## Citation
+This repository could be cited as:
+```
+@article{gella2023self,
+  title={Self-supervised Variational Autoencoder for Unsupervised Object Counting from Very High-Resolution Satellite Imagery: Applications in Dwelling Extraction in FDP Settlement Areas},
+  author={Gella, Getachew Workineh and Gangloff, Hugo and Wendt, Lorenz and Tiede, Dirk and Lang, Stefan},
+  journal={IEEE Transactions on Geoscience and Remote Sensing},
+  year={2023},
+  publisher={IEEE}
+}
+```
