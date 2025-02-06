@@ -20,7 +20,7 @@ for feature space plot
 python automate_feature_space_plot.py --data_root ./root2data --save_dir ./root2save
 ```
 
-This repository also contains re-implementation of the following research works whose re-implementations are reported for specific tasks in our study
+This repository also contains re-implementation of the following research works where their performance is reported for dwelling localization in our study.
 - [PaDiM: A patch distribution modelling framework for anomaly detection and localization](https://doi.org/10.1007/978-3-030-68799-1_35) where the core implementation is forked from [codebase](https://github.com/xiahaifeng1995/PaDiM-Anomaly-Detection-Localization-master/tree/main) and adapted to our specific dataset
   ```
   python reimplementation/PADIM_all.py --save_path /path2save --root /path2data --arch wide_resnet50_2
